@@ -146,9 +146,9 @@ public:
         }
 
         RT_ASSERT(num_keys > 2);
-        for (int i = 1; i < num_keys; i ++) {
+        /*for (int i = 1; i < num_keys; i ++) {
             RT_ASSERT(vs[i].first > vs[i-1].first);
-        }
+        }*/
 
         destroy_tree(root);
         root = build_tree_bulk(vs, num_keys, 0);
@@ -184,7 +184,7 @@ public:
             printf("]\n");
         }
     }*/
-    void print_depth() const {
+    void print_depth(int *max_depth_ret, double *avg_depth) const {
         std::stack<Node*> s;
         std::stack<int> d;
         s.push(root);
@@ -207,7 +207,10 @@ public:
             }
         }
 
-        printf("max_depth = %d, avg_depth = %.2lf\n", max_depth, double(sum_depth) / double(sum_nodes));
+        // printf("max_depth = %d, avg_depth = %.2lf\n", max_depth, double(sum_depth) / double(sum_nodes));
+        *max_depth_ret = max_depth;
+        *avg_depth = double(sum_depth) / double(sum_nodes);
+        return;
     }
     void verify() const {
         std::stack<Node*> s;

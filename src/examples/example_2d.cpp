@@ -8,48 +8,76 @@ using namespace std;
 
 typedef pair<int, int> Point;
 
+bool sortbyfirst(const Point &a,
+              const Point &b)
+{
+    return (a.first < b.first);
+}
+
+void
+run(int n)
+{
+    LIPP<int> lipp_insert;
+    LIPP<int> lipp_bulk;
+
+    vector<Point> data;
+    for (int i = 0; i < n; ++i)
+        data.push_back(make_pair(rand(), rand()));
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < n; ++i)
+        lipp_insert.insert(data[i]);
+
+    auto end_time = chrono::high_resolution_clock::now();
+    auto duration_insert = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
+
+    start_time = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < n; ++i)
+        lipp_insert.exists(data[i]);
+
+    end_time = chrono::high_resolution_clock::now();
+    auto duration_scan_insert = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
+
+    start_time = std::chrono::high_resolution_clock::now();
+
+    lipp_bulk.bulk_load(data.data(), data.size());
+
+    end_time = chrono::high_resolution_clock::now();
+    auto duration_build = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
+
+    start_time = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < n; ++i)
+        lipp_bulk.exists(data[i]);
+
+    end_time = chrono::high_resolution_clock::now();
+    auto duration_scan_build = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
+
+    int max_depth_insert, max_depth_build;
+    double avg_depth_insert, avg_depth_build;
+    lipp_insert.print_depth(&max_depth_insert, &avg_depth_insert);
+    lipp_bulk.print_depth(&max_depth_build, &avg_depth_build);
+    cout << n << ", " 
+         << duration_insert << ", " 
+         << duration_scan_insert << ", " 
+         << max_depth_insert << ", " 
+         << avg_depth_insert << ", " 
+         << duration_build << ", " 
+         << duration_scan_build << ", " 
+         << max_depth_build << ", " 
+         << avg_depth_build 
+    << endl;
+}
+
 int main()
 {
     srand(time(NULL));
 
-    LIPP<int> lipp;
-
-    int n = 10000000;
-    Point p1 = make_pair(104394, 2382034);
-
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    for (int i = 0; i < n / 2; ++i)
-    {
-        Point p = make_pair(rand(), rand());
-        // if (!lipp.exists(p))
-        lipp.insert(p);
-    }
-
-    if (!lipp.exists(p1))
-        lipp.insert(p1);
-    else
-        cout << "Point already exists!" << endl;
-
-    for (int i = 0; i < n / 2; ++i)
-    {
-        Point p = make_pair(rand(), rand());
-        // if (!lipp.exists(p))
-        lipp.insert(p);
-    }
-
-    cout << "Point found = " << (lipp.exists(p1) ? "true" : "false") << endl;
-
-    auto end_time = chrono::high_resolution_clock::now();
-    auto duration = end_time - start_time;
-    auto duration_seconds = chrono::duration_cast<chrono::nanoseconds>(duration).count() * 1e-9;
-
-    cout << "Duration = " << duration_seconds << "s" << endl;
-    cout << "Throughput = " << n / (1000000 * duration_seconds) << "M/s" << endl;
-
-    // lipp.verify();
-    // lipp.print_depth();
-    // lipp.print_stats();
+    run(1e6);
+    for (int n = 5e6; n < 1e8; n += 5e6)
+        run(n);
 
     return 0;
 }
