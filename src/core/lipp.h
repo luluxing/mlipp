@@ -208,7 +208,7 @@ public:
             printf("]\n");
         }
     }
-    void print_depth() const {
+    void print_depth(int *max_depth_ret, double *avg_depth) const {
         std::stack<Node*> s;
         std::stack<int> d;
         s.push(root);
@@ -231,7 +231,10 @@ public:
             }
         }
 
-        printf("max_depth = %d, avg_depth = %.2lf\n", max_depth, double(sum_depth) / double(sum_nodes));
+        // printf("max_depth = %d, avg_depth = %.2lf\n", max_depth, double(sum_depth) / double(sum_nodes));
+        *max_depth_ret = max_depth;
+        *avg_depth = double(sum_depth) / double(sum_nodes);
+        return;
     }
     void verify() const {
         std::stack<Node*> s;
