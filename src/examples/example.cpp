@@ -15,6 +15,19 @@ bool sortbyfirst(const Point &a,
     return (a.first < b.first);
 }
 
+vector<Point> seqRangeQuery(vector<Point> points, 
+    Point min_key, Point max_key)
+{
+    vector<Point> result;
+    for (uint i = 0; i < points.size(); ++i)
+    {
+        if (points[i].first >= min_key.first 
+            && points[i].first <= max_key.first)
+            result.push_back(points[i]);
+    }
+    return result;
+}
+
 void
 run(int n_loop)
 {
@@ -90,13 +103,58 @@ run(int n_loop)
     << endl;
 }
 
+void
+range_test(int n_loop)
+{
+    LIPP<int, int> lipp;
+
+    vector<Point> data_raw;
+    for (int i = 0; i < n_loop; ++i)
+        data_raw.push_back(make_pair(rand(), rand()));
+
+    sort(data_raw.begin(), data_raw.end(), &sortbyfirst);
+
+    vector<int> idx;
+    idx.push_back(0);
+    for (int i = 1; i < n_loop; ++i)
+        if (data_raw[i].first > data_raw[i - 1].first)
+            idx.push_back(i);
+
+    vector<Point> data;
+    for (int i = 0; i < int(idx.size()); ++i)
+        data.push_back(data_raw[idx[i]]);
+
+    lipp.bulk_load(data.data(), data.size());
+
+    Point xmin = make_pair(rand(), rand());
+    Point xmax;
+    do {
+        xmax = make_pair(rand(), rand());
+    } while (xmax.first <= xmin.first);
+
+    std::vector<Point> seq_result = seqRangeQuery(data, xmin, xmax);
+    std::vector<Point> lipp_result = lipp.rangeQuery(xmin.first, xmax.first);
+
+    printf("n_seq = %d, n_lipp = %d\n", int(seq_result.size()), int(lipp_result.size()));
+    if (seq_result.size() == lipp_result.size())
+    {
+        for (uint i = 0; i < seq_result.size(); ++i)
+        {
+            if (seq_result[i].first != lipp_result[i].first)
+                printf("Not equal, %d\n", i);
+        }
+    }
+}
+
 int main()
 {
-    srand(time(NULL));
+    // srand(time(NULL));
 
-    run(1e6);
-    for (int n = 5e6; n < 1e8; n += 5e6)
-        run(n);
+    // run(1e6);
+    // for (int n = 5e6; n < 1e8; n += 5e6)
+    //     run(n);
+
+    range_test(1000000);
 
     return 0;
 }

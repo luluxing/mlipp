@@ -143,6 +143,9 @@ public:
             }
         }
     }
+    std::vector<V> rangeQuery(const T& min_key, const T& max_key) {
+        return rangeQueryInternal(root, min_key, max_key, true, true);
+    }
     void bulk_load(const V* vs, int num_keys) {
         if (num_keys == 0) {
             destroy_tree(root);
@@ -358,6 +361,62 @@ private:
     void delete_bitmap(bitmap_t* p, int n)
     {
         bitmap_allocator.deallocate(p, n);
+    }
+
+    std::vector<V> rangeQueryInternal(Node* root,
+        const T& min_key, const T& max_key,
+        bool recheck_min, bool recheck_max) {
+        std::vector<V> result;
+        int min_pos = 0;
+        int max_pos = root->num_items-1;
+        if (recheck_min)
+            min_pos = PREDICT_POS(root, min_key);
+        if (recheck_max)
+            max_pos = PREDICT_POS(root, max_key);
+        for (int i = min_pos; i < max_pos + 1; i ++) {
+            if (BITMAP_GET(root->none_bitmap, i) == 0) {
+                if (BITMAP_GET(root->child_bitmap, i) == 0) {
+                    if (!((i == min_pos && root->items[i].comp.data.key < min_key) 
+                        || (i == max_pos && root->items[i].comp.data.key > min_key)))
+                        result.push_back(std::make_pair(
+                            root->items[i].comp.data.key, 
+                            root->items[i].comp.data.value));
+                } else {
+                    std::vector<V> node_result;
+                    if (i == min_pos && i == max_pos)
+                        node_result = rangeQueryInternal(root->items[i].comp.child,
+                            min_key, max_key, recheck_min, recheck_max);
+                    else if (i == min_pos)
+                        node_result = rangeQueryInternal(root->items[i].comp.child,
+                            min_key, max_key, recheck_min, false);
+                    else if (i == max_pos)
+                        node_result = rangeQueryInternal(root->items[i].comp.child,
+                            min_key, max_key, false, recheck_max);
+                    else
+                        node_result = fullScanInternal(root->items[i].comp.child);
+                    result.insert(result.end(), node_result.begin(), node_result.end());
+                }
+            }
+        }
+        return result;
+    }
+
+    std::vector<V> fullScanInternal(Node* root) {
+        std::vector<V> result;
+        for (int i = 0; i < root->num_items; i ++) {
+            if (BITMAP_GET(root->none_bitmap, i) == 0) {
+                if (BITMAP_GET(root->child_bitmap, i) == 0) {
+                    result.push_back(std::make_pair(
+                        root->items[i].comp.data.key, 
+                        root->items[i].comp.data.value));
+                } else {
+                    std::vector<V> node_result = fullScanInternal(
+                        root->items[i].comp.child);
+                    result.insert(result.end(), node_result.begin(), node_result.end());
+                }
+            }
+        }
+        return result;
     }
 
     /// build an empty tree
