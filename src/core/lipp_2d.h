@@ -126,6 +126,13 @@ public:
             }
         }
     }
+    std::vector<V> rangeQuery(const V& min_key, const V& max_key, 
+        bool recheck_xmin=true, bool recheck_xmax=true,
+        bool recheck_ymin=true, bool recheck_ymax=true) const {
+        vector<Point> result;
+        /* code */
+        return result;
+    }
     void bulk_load(V* vs, int num_keys) {
 
         if (num_keys == 0) {
