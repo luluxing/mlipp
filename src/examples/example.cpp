@@ -148,13 +148,13 @@ range_test(int n_loop)
 
 int main()
 {
-    // srand(time(NULL));
+    srand(time(NULL));
 
-    // run(1e6);
-    // for (int n = 5e6; n < 1e8; n += 5e6)
-    //     run(n);
+    run(1e6);
+    for (int n = 5e6; n < 1e8; n += 5e6)
+        run(n);
 
-    range_test(1000000);
+    // range_test(1000000);
 
     return 0;
 }

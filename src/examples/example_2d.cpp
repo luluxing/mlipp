@@ -35,7 +35,8 @@ run(int n)
     start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < n; ++i)
-        lipp_insert.exists(data[i]);
+        if (!lipp_insert.exists(data[i]))
+            printf("Not found");
 
     end_time = chrono::high_resolution_clock::now();
     auto duration_scan_insert = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
@@ -50,7 +51,8 @@ run(int n)
     start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < n; ++i)
-        lipp_bulk.exists(data[i]);
+        if (!lipp_bulk.exists(data[i]))
+            printf("Not found");
 
     end_time = chrono::high_resolution_clock::now();
     auto duration_scan_build = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
