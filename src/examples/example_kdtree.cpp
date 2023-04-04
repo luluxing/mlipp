@@ -1,33 +1,30 @@
-#include <lipp_2d.h>
 #include <iostream>
+#include <cstring>
+#include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 #include <time.h>
 #include <chrono>
 
+#include "kdtree.h"
+
 using namespace std;
-
-typedef pair<int, int> Point;
-
-bool sortbyfirst(const Point &a,
-              const Point &b)
-{
-    return (a.first < b.first);
-}
 
 void
 run(int n)
 {
-    LIPP<int> lipp_insert;
-    LIPP<int> lipp_bulk;
+    // Create a new kd-tree
+    KDNode* root_insert = NULL;
+    KDNode* root_bulk = NULL;
 
-    vector<Point> data;
+    Point* points = (Point*)malloc(sizeof(Point) * n);
     for (int i = 0; i < n; ++i)
-        data.push_back(make_pair(rand(), rand()));
+        points[i] = (Point){rand(), rand()};
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < n; ++i)
-        lipp_insert.insert(data[i]);
+        root_insert = kd_insert(root_insert, points[i], 0);
 
     auto end_time = chrono::high_resolution_clock::now();
     auto duration_insert = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
@@ -35,15 +32,14 @@ run(int n)
     start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < n; ++i)
-        if (!lipp_insert.exists(data[i]))
-            printf("Not found");
+        kd_exists(root_insert, points[i], 0);
 
     end_time = chrono::high_resolution_clock::now();
     auto duration_scan_insert = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
 
     start_time = std::chrono::high_resolution_clock::now();
 
-    lipp_bulk.bulk_load(data.data(), data.size());
+    root_bulk = kd_bulk(points, n, 0);
 
     end_time = chrono::high_resolution_clock::now();
     auto duration_build = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
@@ -51,16 +47,19 @@ run(int n)
     start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < n; ++i)
-        if (!lipp_bulk.exists(data[i]))
-            printf("Not found");
+        kd_exists(root_bulk, points[i], 0);
 
     end_time = chrono::high_resolution_clock::now();
     auto duration_scan_build = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
 
     int max_depth_insert, max_depth_build;
+    int sum_depth_insert, sum_depth_build;
+    int sum_nodes_insert, sum_nodes_build;
     double avg_depth_insert, avg_depth_build;
-    lipp_insert.print_depth(&max_depth_insert, &avg_depth_insert);
-    lipp_bulk.print_depth(&max_depth_build, &avg_depth_build);
+    kd_depth(root_insert, 1, &max_depth_insert, &sum_depth_insert, &sum_nodes_insert);
+    kd_depth(root_bulk, 1, &max_depth_build, &sum_depth_build, &sum_nodes_build);
+    avg_depth_insert = double(sum_depth_insert) / double(sum_nodes_insert);
+    avg_depth_build = double(sum_depth_build) / double(sum_nodes_build);
     cout << n << ", " 
          << duration_insert << ", " 
          << duration_scan_insert << ", " 
@@ -73,8 +72,9 @@ run(int n)
     << endl;
 }
 
-int main()
-{
+// Define the main function
+int main() {
+
     srand(time(NULL));
 
     run(1e6);

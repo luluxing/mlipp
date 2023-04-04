@@ -1,4 +1,4 @@
-#include <lipp_2darray.h>
+#include <mlipp_quad.h>
 #include <iostream>
 #include <stdlib.h>
 #include <time.h>
@@ -14,8 +14,8 @@ int main()
 
     for (int n = 1e6; n < 1e8; n += 1e6)
     {
-        LIPP<int> lipp_insert;
-        LIPP<int> lipp_bulk;
+        MLIPP_QUAD<int> lipp_insert;
+        MLIPP_QUAD<int> lipp_bulk;
 
         vector<Point> data;
         for (int i = 0; i < n; ++i)

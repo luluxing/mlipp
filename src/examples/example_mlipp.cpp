@@ -1,4 +1,4 @@
-#include <mlipp_zorder.h>
+#include <mlipp_kd.h>
 #include <iostream>
 #include <stdlib.h>
 #include <time.h>
@@ -17,8 +17,8 @@ bool sortbyfirst(const Point &a,
 void
 run(int n)
 {
-    MLIPP_Z<int> lipp_insert;
-    MLIPP_Z<int> lipp_bulk;
+    MLIPP_KD<int> lipp_insert;
+    MLIPP_KD<int> lipp_bulk;
 
     vector<Point> data;
     for (int i = 0; i < n; ++i)

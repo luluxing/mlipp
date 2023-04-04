@@ -1,7 +1,6 @@
-#ifndef __LIPP_H__
-#define __LIPP_H__
+#ifndef __MLIPP_Z_H__
+#define __MLIPP_Z_H__
 
-#include "lipp_base.h"
 #include <stdint.h>
 #include <math.h>
 #include <limits>
@@ -11,39 +10,16 @@
 #include <cstring>
 #include <sstream>
 
+#include "lipp_base.h"
+#include "lipp_utils.h"
 #include "morton.h"
 
 using namespace libmorton;
 
-typedef uint8_t bitmap_t;
-#define BITMAP_ZERO 0
-#define BITMAP_ONE 0xFF
-#define BITMAP_WIDTH (sizeof(bitmap_t) * 8)
-#define BITMAP_SIZE(num_items) (((num_items) + BITMAP_WIDTH - 1) / BITMAP_WIDTH)
-#define BITMAP_GET(bitmap, pos) (((bitmap)[(pos) / BITMAP_WIDTH] >> ((pos) % BITMAP_WIDTH)) & 1)
-#define BITMAP_SET(bitmap, pos) ((bitmap)[(pos) / BITMAP_WIDTH] |= 1 << ((pos) % BITMAP_WIDTH))
-#define BITMAP_CLEAR(bitmap, pos) ((bitmap)[(pos) / BITMAP_WIDTH] &= ~bitmap_t(1 << ((pos) % BITMAP_WIDTH)))
-#define BITMAP_NEXT_1(bitmap_item) __builtin_ctz((bitmap_item))
-
-// runtime assert
-#define RT_ASSERT(expr) \
-{ \
-    if (!(expr)) { \
-        fprintf(stderr, "RT_ASSERT Error at %s:%d, `%s`\n", __FILE__, __LINE__, #expr); \
-        exit(0); \
-    } \
-}
-
-#define COLLECT_TIME 0
-
-#if COLLECT_TIME
-#include <chrono>
-#endif
-
 template<class T, bool USE_FMCD = true>
-class LIPP
+class MLIPP_Z
 {
-    static_assert(std::is_arithmetic<T>::value, "LIPP key type must be numeric.");
+    static_assert(std::is_arithmetic<T>::value, "MLIPP_Z key type must be numeric.");
 
     typedef std::pair<T, T> V;
     typedef uint_fast64_t Z;
@@ -89,15 +65,11 @@ class LIPP
     struct {
         long long fmcd_success_times = 0;
         long long fmcd_broken_times = 0;
-        #if COLLECT_TIME
-        double time_scan_and_destory_tree = 0;
-        double time_build_tree_bulk = 0;
-        #endif
     } stats;
 
 public:
 
-    LIPP(double BUILD_LR_REMAIN = 0, bool QUIET = true)
+    MLIPP_Z(double BUILD_LR_REMAIN = 0, bool QUIET = true)
         : BUILD_LR_REMAIN(BUILD_LR_REMAIN), QUIET(QUIET) {
         /*{
             std::vector<Node*> nodes;
@@ -118,7 +90,7 @@ public:
 
         root = build_tree_none();
     }
-    ~LIPP() {
+    ~MLIPP_Z() {
         destroy_tree(root);
         root = NULL;
         destory_pending();
@@ -169,7 +141,7 @@ public:
     }
 
     /*void show() const {
-        printf("============= SHOW LIPP ================\n");
+        printf("============= SHOW MLIPP_Z ================\n");
 
         std::stack<Node*> s;
         s.push(root);
@@ -250,10 +222,6 @@ public:
             printf("\t fmcd_success_times = %lld\n", stats.fmcd_success_times);
             printf("\t fmcd_broken_times = %lld\n", stats.fmcd_broken_times);
         }
-        #if COLLECT_TIME
-        printf("\t time_scan_and_destory_tree = %lf\n", stats.time_scan_and_destory_tree);
-        printf("\t time_build_tree_bulk = %lf\n", stats.time_build_tree_bulk);
-        #endif
     }
     size_t index_size(bool total=false, bool ignore_child=true) const {
         std::stack<Node*> s;
@@ -859,25 +827,8 @@ private:
                 const int ESIZE = node->size;
                 V* keys = new V[ESIZE];
 
-                #if COLLECT_TIME
-                auto start_time_scan = std::chrono::high_resolution_clock::now();
-                #endif
                 scan_and_destory_tree(node, keys);
-                #if COLLECT_TIME
-                auto end_time_scan = std::chrono::high_resolution_clock::now();
-                auto duration_scan = end_time_scan - start_time_scan;
-                stats.time_scan_and_destory_tree += std::chrono::duration_cast<std::chrono::nanoseconds>(duration_scan).count() * 1e-9;
-                #endif
-
-                #if COLLECT_TIME
-                auto start_time_build = std::chrono::high_resolution_clock::now();
-                #endif
                 Node* new_node = build_tree_bulk(keys, ESIZE, true);
-                #if COLLECT_TIME
-                auto end_time_build = std::chrono::high_resolution_clock::now();
-                auto duration_build = end_time_build - start_time_build;
-                stats.time_build_tree_bulk += std::chrono::duration_cast<std::chrono::nanoseconds>(duration_build).count() * 1e-9;
-                #endif
 
                 delete[] keys;
 
@@ -895,4 +846,4 @@ private:
     }
 };
 
-#endif // __LIPP_H__
+#endif // __MLIPP_Z_H__
