@@ -31,11 +31,15 @@ new_kd_node(Point point) {
 
 // Define a function to bulk-load points into a kd-tree
 KDNode*
-kd_bulk(Point* points, int size, int depth) {
+kd_bulk(Point* points, int size, int depth, int *max_depth) {
     if (size <= 0)
         return NULL;
     else if (size == 1)
+    {
+        if (depth > (*max_depth))
+            *max_depth = depth;
         return new_kd_node(points[0]);
+    }
     else
     {
         // Choose the axis based on depth
@@ -56,9 +60,9 @@ kd_bulk(Point* points, int size, int depth) {
 
         KDNode *root = new_kd_node(points[middle]);
         if (middle > 0)
-            root->left = kd_bulk(points, middle, depth + 1);
+            root->left = kd_bulk(points, middle, depth + 1, max_depth);
         if (size - middle - 1 > 0)
-            root->right = kd_bulk(points + middle + 1, size - middle - 1, depth + 1);
+            root->right = kd_bulk(points + middle + 1, size - middle - 1, depth + 1, max_depth);
         return root;
     }
 }
@@ -125,6 +129,367 @@ kd_search(KDNode* root, Point point, int depth) {
 inline bool
 kd_exists(KDNode* root, Point point, int depth) {
     return kd_search(root, point, depth) != NULL;
+}
+
+Point *
+kd_range(KDNode* root, Point min_point, Point max_point, 
+    int max_depth, int *count)
+{
+    int k = 0, size = 256, state = 0, depth = 0;
+    Point *result = (Point*)malloc(sizeof(Point) * size);
+    KDNode* node = root;
+    KDNode** parents = (KDNode**)malloc(sizeof(KDNode*)*max_depth);
+    while (state < 4)
+    {
+        // Choose the axis based on depth
+        int axis = depth % 2;
+
+        switch (state)
+        {
+            case 0:
+                // Go to left child
+                if (node->left == NULL)
+                    state++;
+                else
+                {
+                    if ((axis == 0 && min_point.x < node->point.x)
+                        || (axis == 1 && min_point.y < node->point.y))
+                    {
+                        parents[depth++] = node;
+                        node = node->left;
+                    }
+                    else
+                        state++;
+                }
+                break;
+            case 1:
+                // Check point
+                if (node->point.x >= min_point.x
+                 && node->point.y >= min_point.y
+                 && node->point.x <= max_point.x
+                 && node->point.y <= max_point.y)
+                {
+                    if (k >= size)
+                    {
+                        size *= 2;
+                        result = (Point *)realloc(result, sizeof(Point) * size);
+                    }
+                    result[k++] = node->point;
+                }
+                state++;
+                break;
+            case 2:
+                // Go to right child
+                if (node->right == NULL)
+                    state++;
+                else
+                {
+                    if ((axis == 0 && max_point.x >= node->point.x)
+                        || (axis == 1 && max_point.y >= node->point.y))
+                    {
+                        parents[depth++] = node;
+                        node = node->right;
+                        state = 0;
+                    }
+                    else
+                        state++;
+                }
+                break;
+            case 3:
+                // Search is over
+                if (node == root)
+                    state++;
+                else
+                {
+                    // Go to parent
+                    KDNode *curr = node;
+                    node = parents[--depth];
+                    if (node->left == curr)
+                        state = 1;
+                }
+                break;
+            default:
+                // Should never happen
+                break;
+        }
+    }
+
+    result = (Point *)realloc(result, sizeof(Point) * k);
+    *count = k;
+    return result;
+}
+
+Point *
+kd_range2(KDNode* root, Point min_point, Point max_point, 
+    int depth, int *count)
+{
+    if (root == NULL)
+    {
+        *count = 0;
+        return NULL;
+    }
+
+    int k = 0, size, size_left, size_right;
+    Point *result, *result_left, *result_right;
+    result_left = kd_range1(root->left, min_point, max_point, depth + 1, &size_left);
+    result_right = kd_range1(root->right, min_point, max_point, depth + 1, &size_right);
+    bool contained = root->point.x >= min_point.x
+        && root->point.y >= min_point.y
+        && root->point.x <= max_point.x
+        && root->point.y <= max_point.y;
+
+    size = size_left + size_right;
+    if (contained)
+        size++;
+    result = (Point*)malloc(sizeof(Point) * size);
+    for (int i = 0; i < size_left; ++i)
+        result[k++] = result_left[i];
+    if (contained)
+        result[k++] = root->point;
+    for (int i = 0; i < size_right; ++i)
+        result[k++] = result_right[i];
+
+    *count = size;
+    return result;
+}
+
+Point *
+kd_range3(KDNode* root, Point min_point, Point max_point, 
+    int depth, int *count)
+{
+    if (root == NULL)
+    {
+        *count = 0;
+        return NULL;
+    }
+
+    // Choose the axis based on depth
+    int axis = depth % 2;
+
+    int k = 0, size, size_left = 0, size_right = 0;
+    Point *result, *result_left = NULL, *result_right = NULL;
+    bool contained = root->point.x >= min_point.x
+        && root->point.y >= min_point.y
+        && root->point.x <= max_point.x
+        && root->point.y <= max_point.y;
+
+    if (axis == 0)
+    {
+        if (min_point.x < root->point.x)
+            result_left = kd_range2(root->left, min_point, max_point, depth + 1, &size_left);
+        if (max_point.x >= root->point.x)
+            result_right = kd_range2(root->right, min_point, max_point, depth + 1, &size_right);
+    }
+    else
+    {
+        if (min_point.y < root->point.y)
+            result_left = kd_range2(root->left, min_point, max_point, depth + 1, &size_left);
+        if (max_point.y >= root->point.y)
+            result_right = kd_range2(root->right, min_point, max_point, depth + 1, &size_right);
+    }
+
+    size = size_left + size_right;
+    if (contained)
+        size++;
+    result = (Point*)malloc(sizeof(Point) * size);
+    for (int i = 0; i < size_left; ++i)
+        result[k++] = result_left[i];
+    if (contained)
+        result[k++] = root->point;
+    for (int i = 0; i < size_right; ++i)
+        result[k++] = result_right[i];
+
+    free(result_left);
+    free(result_right);
+    
+    *count = size;
+    return result;
+}
+
+Point *
+kd_range4(KDNode* root, Point min_point, Point max_point, 
+    int max_depth, int *count)
+{
+    int k = 0, size = 256, state = 0, depth = 0;
+    Point *result = (Point*)malloc(sizeof(Point) * size);
+    KDNode* node = root;
+    KDNode** parents = (KDNode**)malloc(sizeof(KDNode*)*max_depth);
+    while (state < 4)
+    {
+        switch (state)
+        {
+            case 0:
+                // Go to left child
+                if (node->left != NULL)
+                {
+                    parents[depth++] = node;
+                    node = node->left;
+                }
+                else
+                    state++;
+                break;
+            case 1:
+                // Check point
+                if (node->point.x >= min_point.x
+                 && node->point.y >= min_point.y
+                 && node->point.x <= max_point.x
+                 && node->point.y <= max_point.y)
+                {
+                    if (k >= size)
+                    {
+                        size *= 2;
+                        result = (Point *)realloc(result, sizeof(Point) * size);
+                    }
+                    result[k++] = node->point;
+                }
+                state++;
+                break;
+            case 2:
+                // Go to right child
+                if (node->right != NULL)
+                {
+                    parents[depth++] = node;
+                    node = node->right;
+                    state = 0;
+                }
+                else
+                    state++;
+                break;
+            case 3:
+                // Search is over
+                if (node == root)
+                    state++;
+                else
+                {
+                    // Go to parent
+                    KDNode *curr = node;
+                    node = parents[--depth];
+                    if (node->left == curr)
+                        state = 1;
+                }
+                break;
+            default:
+                // Should never happen
+                break;
+        }
+    }
+
+    result = (Point *)realloc(result, sizeof(Point) * k);
+    *count = k;
+    return result;
+}
+
+Point *
+kd_range5(KDNode* root, Point min_point, Point max_point, 
+    int max_depth, int *count)
+{
+    int k = 0, size = 256, state = 0, depth = 0;
+    Point *result = (Point*)malloc(sizeof(Point) * size);
+    KDNode* node = root;
+    KDNode** parents = (KDNode**)malloc(sizeof(KDNode*)*max_depth);
+    while (state < 4)
+    {
+        // Choose the axis based on depth
+        int axis = depth % 2;
+
+        switch (state)
+        {
+            case 0:
+                // Go to left child
+                if (node->left == NULL)
+                    state++;
+                else
+                {
+                    if (axis == 0)
+                    {
+                        if (min_point.x < node->point.x)
+                        {
+                            parents[depth++] = node;
+                            node = node->left;
+                        }
+                        else
+                            state++;
+                    }
+                    else
+                    {
+                        if (min_point.y < node->point.y)
+                        {
+                            parents[depth++] = node;
+                            node = node->left;
+                        }
+                        else
+                            state++;
+                    }
+                }
+                break;
+            case 1:
+                // Check point
+                if (node->point.x >= min_point.x
+                 && node->point.y >= min_point.y
+                 && node->point.x <= max_point.x
+                 && node->point.y <= max_point.y)
+                {
+                    if (k >= size)
+                    {
+                        size *= 2;
+                        result = (Point *)realloc(result, sizeof(Point) * size);
+                    }
+                    result[k++] = node->point;
+                }
+                state++;
+                break;
+            case 2:
+                // Go to right child
+                if (node->right == NULL)
+                    state++;
+                else
+                {
+                    if (axis == 0)
+                    {
+                        if (max_point.x >= node->point.x)
+                        {
+                            parents[depth++] = node;
+                            node = node->right;
+                            state = 0;
+                        }
+                        else
+                            state++;
+                    }
+                    else
+                    {
+                        if (max_point.y >= node->point.y)
+                        {
+                            parents[depth++] = node;
+                            node = node->right;
+                            state = 0;
+                        }
+                        else
+                            state++;
+                    }
+                }
+                break;
+            case 3:
+                // Search is over
+                if (node == root)
+                    state++;
+                else
+                {
+                    // Go to parent
+                    KDNode *curr = node;
+                    node = parents[--depth];
+                    if (node->left == curr)
+                        state = 1;
+                }
+                break;
+            default:
+                // Should never happen
+                break;
+        }
+    }
+
+    result = (Point *)realloc(result, sizeof(Point) * k);
+    *count = k;
+    return result;
 }
 
 void
