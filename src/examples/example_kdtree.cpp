@@ -131,15 +131,16 @@ range_test(int n)
 
     int seq_count, kd_count;
     Point *seq_result = sequential_range_query(points, n, min_point, max_point, &seq_count);
+    Point *kd_result;
 
     printf("Total size = %d, Result size = %d\n", n, seq_count);
 
-    start_time = std::chrono::high_resolution_clock::now();
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     kd_result = kd_range(root, min_point, max_point, max_depth, &kd_count);
 
-    end_time = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
+    auto end_time = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
     cout << "Duration: range5 = " << duration << endl;
 
     if (seq_count == kd_count)
