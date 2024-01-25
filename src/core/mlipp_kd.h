@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <math.h>
+#include <cfloat>
 #include <limits>
 #include <cstdio>
 #include <stack>
@@ -12,19 +13,12 @@
 
 #include "lipp_base.h"
 #include "lipp_utils.h"
-
-#define COLLECT_TIME 0
-
-#if COLLECT_TIME
-#include <chrono>
-#endif
+#include "point.h"
+#include "mlipp_pairingheap.h"
 
 template<class T, bool USE_FMCD = true>
 class MLIPP_KD
 {
-    static_assert(std::is_arithmetic<T>::value, "MLIPP_KD key type must be numeric.");
-
-    typedef std::pair<T, T> V;
 
     inline int compute_gap_count(int size) {
         if (size >= 1000000) return 1;
@@ -32,13 +26,9 @@ class MLIPP_KD
         return 5;
     }
 
-    inline int KEY_VALUE(const V& key, int level) const {
-        return (level % 2 == 0) ? key.first : key.second;
-    }
-
     struct Node;
-    inline int PREDICT_POS(Node* node, const V& key) const {
-        double v = node->model.predict_double(KEY_VALUE(key, node->level));
+    inline int PREDICT_POS(Node* node, const Point& key) const {
+        double v = node->model.predict_double(PT_VAL(key, node->level % 2));
         if (v > std::numeric_limits<int>::max() / 2) {
             return node->num_items - 1;
         }
@@ -58,10 +48,6 @@ class MLIPP_KD
     struct {
         long long fmcd_success_times = 0;
         long long fmcd_broken_times = 0;
-        #if COLLECT_TIME
-        double time_scan_and_destory_tree = 0;
-        double time_build_tree_bulk = 0;
-        #endif
     } stats;
 
 public:
@@ -93,23 +79,38 @@ public:
         destory_pending();
     }
 
-    void insert(const V& key) {
+    void insert(const Point& key) {
         root = insert_tree(root, key);
     }
-    bool exists(const V& key) const {
+    bool exists(const Point& key) const {
         Node* node = root;
         while (true) {
             int pos = PREDICT_POS(node, key);
             if (BITMAP_GET(node->none_bitmap, pos) == 1) {
                 return false;
             } else if (BITMAP_GET(node->child_bitmap, pos) == 0) {
-                return node->items[pos].comp.data == key;
+                return PT_EQ(node->items[pos].comp.data, key);
             } else {
                 node = node->items[pos].comp.child;
             }
         }
     }
-    void bulk_load(V* vs, int num_keys) {
+    void rangeQuery(const Point& min_key, const Point& max_key, std::vector<Point>& result) {
+        rangeQueryInternal2(root, min_key, max_key, result);
+        /*rangeQueryInternal(root, min_key, max_key,
+            std::make_pair(true, true), 
+            std::make_pair(true, true),
+            result);*/
+        return;
+    }
+    // Find the keys which are in range [lower, upper], returns the number of found keys.
+    int range_query(const Point& lower, const Point& upper, Point* results) const {
+        return range_core_x<false, false, false, false>(results, 0, root, lower, upper);
+    }
+    int knn_query(const Point& key, int k, Point* results, double* distances) {
+        return knn_core(root, key, k, results, distances);
+    }
+    void bulk_load(Point* vs, int num_keys) {
 
         if (num_keys == 0) {
             destroy_tree(root);
@@ -219,10 +220,6 @@ public:
             printf("\t fmcd_success_times = %lld\n", stats.fmcd_success_times);
             printf("\t fmcd_broken_times = %lld\n", stats.fmcd_broken_times);
         }
-        #if COLLECT_TIME
-        printf("\t time_scan_and_destory_tree = %lf\n", stats.time_scan_and_destory_tree);
-        printf("\t time_build_tree_bulk = %lf\n", stats.time_build_tree_bulk);
-        #endif
     }
     size_t index_size(bool total=false, bool ignore_child=true) const {
         std::stack<Node*> s;
@@ -259,7 +256,7 @@ private:
     struct Item
     {
         union {
-            V data;
+            Point data;
             Node* child;
         } comp;
     };
@@ -317,6 +314,1071 @@ private:
         bitmap_allocator.deallocate(p, n);
     }
 
+    int knn_core(Node* root, const Point& key, int k,
+        Point* results, double* distances)
+    {
+        double maxDist = DBL_MAX;
+        int n = 0;
+
+        int pos = PREDICT_POS(root, key);
+        MPHeap heap = {NULL};
+        MPNode *min_elem = pairingheap_allocate(MP_ANY, root, pos, 0, 0, 0);
+
+        do {
+            int entry_type = min_elem->entry_type;
+            Node* node = (Node*)min_elem->node;
+            pos = min_elem->pos;
+
+            // printf("%lf\n", sqrt(min_elem->distance));
+            /* End if distance is larger than maxDist */
+            if (min_elem->distance > maxDist)
+                break;
+
+            /* Check value */
+            if (BITMAP_GET(node->none_bitmap, pos) == 0) {
+                if (BITMAP_GET(node->child_bitmap, pos) == 0) {
+                    /* It's a data point */
+                    Point p = node->items[pos].comp.data;
+                    double dist = pow(p.x - key.x, 2) + pow(p.y - key.y, 2);
+                    // printf("Distance = %f\n", sqrt(dist));
+                    if (dist < maxDist) {
+                        /* Find its position in KNN list */
+                        int i = n;
+                        while (i > 0 && dist < distances[i-1])
+                            i--;
+                        /* Insert it into KNN list */
+                        int shift_count = n < k ? n - i : n - i - 1;
+                        memmove(&results[i + 1], &results[i], sizeof(Point)*shift_count);
+                        memmove(&distances[i + 1], &distances[i], sizeof(double)*shift_count);
+                        results[i] = p;
+                        distances[i] = dist;
+                        /* Update maxDist if we replaced an element */
+                        if (n < k)
+                            n++;
+                        if (n == k)
+                            maxDist = distances[n - 1];
+                    }
+                } else {
+                    /* It's a node */
+                    Node* child_node = node->items[pos].comp.child;
+                    int child_pos = PREDICT_POS(child_node, key);
+                    MPNode *child_elem = pairingheap_allocate(MP_ANY, child_node, child_pos, 
+                        min_elem->dx, min_elem->dy, min_elem->distance);
+                    pairingheap_add(&heap, child_elem);
+                }
+            }
+
+            /* TODO: skip empty slots */
+
+            if (entry_type & 1 && pos > 0) {
+                int axis = node->level % 2;
+                double dx = min_elem->dx;
+                double dy = min_elem->dy;
+                if (pos == node->num_items - 1 || entry_type == MP_ANY) {
+                    double key_pos = node->model.predict_double(PT_VAL(key, axis));
+                    if (axis == 0)
+                        dx = (key_pos - static_cast<double>(pos)) / node->model.a;
+                    else
+                        dy = (key_pos - static_cast<double>(pos)) / node->model.a;
+                } else {
+                    if (axis == 0)
+                        dx += 1.0 / node->model.a;
+                    else
+                        dy += 1.0 / node->model.a;
+                }
+                double distance = dx*dx + dy*dy;
+                MPNode *left_elem = pairingheap_allocate(MP_LEFT, node, pos - 1, 
+                    dx, dy, distance);
+                pairingheap_add(&heap, left_elem);
+            }
+
+            if (entry_type & 2 && pos < node->num_items - 1) {
+                int axis = node->level % 2;
+                double dx = min_elem->dx;
+                double dy = min_elem->dy;
+                if (pos == 0 || entry_type == MP_ANY) {
+                    double key_pos = node->model.predict_double(PT_VAL(key, axis));
+                    if (axis == 0)
+                        dx = (static_cast<double>(pos + 1) - key_pos) / node->model.a;
+                    else
+                        dy = (static_cast<double>(pos + 1) - key_pos) / node->model.a;
+                } else {
+                    if (axis == 0)
+                        dx += 1.0 / node->model.a;
+                    else
+                        dy += 1.0 / node->model.a;
+                }
+                double distance = dx*dx + dy*dy;
+                MPNode *right_elem = pairingheap_allocate(MP_RIGHT, node, pos + 1, 
+                    dx, dy, distance);
+                pairingheap_add(&heap, right_elem);
+            }
+            free(min_elem);
+        } while (pairingheap_remove_first(&heap, &min_elem));
+
+        /* We were working with squared distances for efficiency */
+        for (int i = 0; i < n; ++i)
+            distances[i] = sqrt(distances[i]);
+        return n;
+    }
+
+    // SATISFY_LOWER = true means all the keys in the subtree of `node` are no less than to `lower`.
+    // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
+    template<bool SATISFY_LOWER_X, bool SATISFY_UPPER_X, 
+             bool SATISFY_LOWER_Y, bool SATISFY_UPPER_Y>
+    int range_core_x(Point* results, int pos, Node* node, const Point& lower, const Point& upper) const
+    {
+        if constexpr (SATISFY_LOWER_X && SATISFY_UPPER_X) {
+            int bit_pos = 0;
+            const bitmap_t* none_bitmap = node->none_bitmap;
+            while (bit_pos < node->num_items) {
+                bitmap_t not_none = ~(*none_bitmap);
+                while (not_none) {
+                    int latest_pos = BITMAP_NEXT_1(not_none);
+                    not_none ^= 1 << latest_pos;
+
+                    int i = bit_pos + latest_pos;
+                    if constexpr (SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            results[pos++] = node->items[i].comp.data;
+                        } else {
+                            pos = range_core_y<true, true, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    } else if constexpr (SATISFY_LOWER_Y && !SATISFY_UPPER_Y) {
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.y <= upper.y) {
+                                results[pos++] = node->items[i].comp.data;
+                            }
+                        } else {
+                            pos = range_core_y<true, false, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    } else if constexpr (!SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.y >= lower.y) {
+                                results[pos++] = node->items[i].comp.data;
+                            }
+                        } else {
+                            pos = range_core_y<false, true, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    } else { // if constexpr (!SATISFY_LOWER_Y && !SATISFY_UPPER_Y)
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.y >= lower.y
+                                && node->items[i].comp.data.y <= upper.y) {
+                                results[pos++] = node->items[i].comp.data;
+                            }
+                        } else {
+                            pos = range_core_y<false, false, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    }
+                }
+
+                bit_pos += BITMAP_WIDTH;
+                none_bitmap ++;
+            }
+            return pos;
+        } else {
+            int lower_pos = SATISFY_LOWER_X ? -1 : PREDICT_POS(node, lower);
+            int upper_pos = SATISFY_UPPER_X ? node->num_items : PREDICT_POS(node, upper);
+            if constexpr (!SATISFY_LOWER_X) {
+                if (BITMAP_GET(node->none_bitmap, lower_pos) == 0) {
+                    if constexpr (SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.x < lower.x) break;
+                                if constexpr (!SATISFY_UPPER_X) {
+                                    if (node->items[lower_pos].comp.data.x > upper.x) break;
+                                }
+                                results[pos++] = node->items[lower_pos].comp.data;
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_y<true, true, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_y<true, true, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    } else if constexpr (SATISFY_LOWER_Y && !SATISFY_UPPER_Y) {
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.x < lower.x) break;
+                                if constexpr (!SATISFY_UPPER_X) {
+                                    if (node->items[lower_pos].comp.data.x > upper.x) break;
+                                }
+                                if (node->items[lower_pos].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[lower_pos].comp.data;
+                                }
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_y<true, false, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_y<true, false, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    } else if constexpr (!SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.x < lower.x) break;
+                                if constexpr (!SATISFY_UPPER_X) {
+                                    if (node->items[lower_pos].comp.data.x > upper.x) break;
+                                }
+                                if (node->items[lower_pos].comp.data.y >= lower.y) {
+                                    results[pos++] = node->items[lower_pos].comp.data;
+                                }
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_y<false, true, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_y<false, true, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    } else { // if constexpr (!SATISFY_LOWER_Y && !SATISFY_UPPER_Y)
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.x < lower.x) break;
+                                if constexpr (!SATISFY_UPPER_X) {
+                                    if (node->items[lower_pos].comp.data.x > upper.x) break;
+                                }
+                                if (node->items[lower_pos].comp.data.y >= lower.y
+                                    && node->items[lower_pos].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[lower_pos].comp.data;
+                                }
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_y<false, false, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_y<false, false, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                int bit_pos = (lower_pos + 1) / BITMAP_WIDTH * BITMAP_WIDTH;
+                const bitmap_t* none_bitmap = node->none_bitmap + bit_pos / BITMAP_WIDTH;
+                while (bit_pos < upper_pos) {
+                    bitmap_t not_none = ~(*none_bitmap);
+                    while (not_none) {
+                        int latest_pos = BITMAP_NEXT_1(not_none);
+                        not_none ^= 1 << latest_pos;
+
+                        int i = bit_pos + latest_pos;
+                        if (i <= lower_pos) continue;
+                        if (i >= upper_pos) break;
+
+                        if constexpr (SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                results[pos++] = node->items[i].comp.data;
+                            } else {
+                                pos = range_core_y<true, true, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        } else if constexpr (SATISFY_LOWER_Y && !SATISFY_UPPER_Y) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (node->items[i].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[i].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<true, false, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        } else if constexpr (!SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (node->items[i].comp.data.y >= lower.y) {
+                                    results[pos++] = node->items[i].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<false, true, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        } else { // if constexpr (!SATISFY_LOWER_Y && !SATISFY_UPPER_Y)
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (node->items[i].comp.data.y >= lower.y
+                                    && node->items[i].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[i].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<false, false, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        }
+                    }
+
+                    bit_pos += BITMAP_WIDTH;
+                    none_bitmap ++;
+                }
+            }
+            if constexpr (!SATISFY_UPPER_X) {
+                if (lower_pos < upper_pos) {
+                    if (BITMAP_GET(node->none_bitmap, upper_pos) == 0) {
+                        if constexpr (SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<true, true, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        } else if constexpr (SATISFY_LOWER_Y && !SATISFY_UPPER_Y) {
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.x <= upper.x
+                                    && node->items[upper_pos].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<true, false, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        } else if constexpr (!SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.x <= upper.x
+                                    && node->items[upper_pos].comp.data.y >= lower.y) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<false, true, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        } else { // if constexpr (!SATISFY_LOWER_Y && !SATISFY_UPPER_Y)
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.x <= upper.x
+                                    && node->items[upper_pos].comp.data.y >= lower.y
+                                    && node->items[upper_pos].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_y<false, false, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        }
+                    }
+                }
+            }
+            return pos;
+        }
+    }
+
+    // SATISFY_LOWER = true means all the keys in the subtree of `node` are no less than to `lower`.
+    // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
+    template<bool SATISFY_LOWER_Y, bool SATISFY_UPPER_Y, 
+             bool SATISFY_LOWER_X, bool SATISFY_UPPER_X>
+    int range_core_y(Point* results, int pos, Node* node, const Point& lower, const Point& upper) const
+    {
+        if constexpr (SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
+            int bit_pos = 0;
+            const bitmap_t* none_bitmap = node->none_bitmap;
+            while (bit_pos < node->num_items) {
+                bitmap_t not_none = ~(*none_bitmap);
+                while (not_none) {
+                    int latest_pos = BITMAP_NEXT_1(not_none);
+                    not_none ^= 1 << latest_pos;
+
+                    int i = bit_pos + latest_pos;
+                    if constexpr (SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            results[pos++] = node->items[i].comp.data;
+                        } else {
+                            pos = range_core_x<true, true, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    } else if constexpr (SATISFY_LOWER_X && !SATISFY_UPPER_X) {
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.x <= upper.x) {
+                                results[pos++] = node->items[i].comp.data;
+                            }
+                        } else {
+                            pos = range_core_x<true, false, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    } else if constexpr (!SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.x >= lower.x) {
+                                results[pos++] = node->items[i].comp.data;
+                            }
+                        } else {
+                            pos = range_core_x<false, true, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    } else { // if constexpr (!SATISFY_LOWER_X && !SATISFY_UPPER_X)
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.x >= lower.x
+                                && node->items[i].comp.data.x <= upper.x) {
+                                results[pos++] = node->items[i].comp.data;
+                            }
+                        } else {
+                            pos = range_core_x<false, false, true, true>(
+                                results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    }
+                }
+
+                bit_pos += BITMAP_WIDTH;
+                none_bitmap ++;
+            }
+            return pos;
+        } else {
+            int lower_pos = SATISFY_LOWER_Y ? -1 : PREDICT_POS(node, lower);
+            int upper_pos = SATISFY_UPPER_Y ? node->num_items : PREDICT_POS(node, upper);
+            if constexpr (!SATISFY_LOWER_Y) {
+                if (BITMAP_GET(node->none_bitmap, lower_pos) == 0) {
+                    if constexpr (SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.y < lower.y) break;
+                                if constexpr (!SATISFY_UPPER_Y) {
+                                    if (node->items[lower_pos].comp.data.y > upper.y) break;
+                                }
+                                results[pos++] = node->items[lower_pos].comp.data;
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_x<true, true, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_x<true, true, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    } else if constexpr (SATISFY_LOWER_X && !SATISFY_UPPER_X) {
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.y < lower.y) break;
+                                if constexpr (!SATISFY_UPPER_Y) {
+                                    if (node->items[lower_pos].comp.data.y > upper.y) break;
+                                }
+                                if (node->items[lower_pos].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[lower_pos].comp.data;
+                                }
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_x<true, false, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_x<true, false, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    } else if constexpr (!SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.y < lower.y) break;
+                                if constexpr (!SATISFY_UPPER_Y) {
+                                    if (node->items[lower_pos].comp.data.y > upper.y) break;
+                                }
+                                if (node->items[lower_pos].comp.data.x >= lower.x) {
+                                    results[pos++] = node->items[lower_pos].comp.data;
+                                }
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_x<false, true, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_x<false, true, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    } else { // if constexpr (!SATISFY_LOWER_X && !SATISFY_UPPER_X)
+                        if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                            do {
+                                if (node->items[lower_pos].comp.data.y < lower.y) break;
+                                if constexpr (!SATISFY_UPPER_Y) {
+                                    if (node->items[lower_pos].comp.data.y > upper.y) break;
+                                }
+                                if (node->items[lower_pos].comp.data.x >= lower.x
+                                    && node->items[lower_pos].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[lower_pos].comp.data;
+                                }
+                            } while (false);
+                        } else {
+                            if (lower_pos < upper_pos) {
+                                pos = range_core_x<false, false, false, true>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            } else {
+                                pos = range_core_x<false, false, false, false>(
+                                    results, pos, node->items[lower_pos].comp.child, lower, upper);
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                int bit_pos = (lower_pos + 1) / BITMAP_WIDTH * BITMAP_WIDTH;
+                const bitmap_t* none_bitmap = node->none_bitmap + bit_pos / BITMAP_WIDTH;
+                while (bit_pos < upper_pos) {
+                    bitmap_t not_none = ~(*none_bitmap);
+                    while (not_none) {
+                        int latest_pos = BITMAP_NEXT_1(not_none);
+                        not_none ^= 1 << latest_pos;
+
+                        int i = bit_pos + latest_pos;
+                        if (i <= lower_pos) continue;
+                        if (i >= upper_pos) break;
+
+                        if constexpr (SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                results[pos++] = node->items[i].comp.data;
+                            } else {
+                                pos = range_core_x<true, true, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        } else if constexpr (SATISFY_LOWER_X && !SATISFY_UPPER_X) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (node->items[i].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[i].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<true, false, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        } else if constexpr (!SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (node->items[i].comp.data.x >= lower.x) {
+                                    results[pos++] = node->items[i].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<false, true, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        } else { // if constexpr (!SATISFY_LOWER_X && !SATISFY_UPPER_X)
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (node->items[i].comp.data.x >= lower.x
+                                    && node->items[i].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[i].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<false, false, true, true>(
+                                    results, pos, node->items[i].comp.child, lower, upper);
+                            }
+                        }
+                    }
+
+                    bit_pos += BITMAP_WIDTH;
+                    none_bitmap ++;
+                }
+            }
+            if constexpr (!SATISFY_UPPER_Y) {
+                if (lower_pos < upper_pos) {
+                    if (BITMAP_GET(node->none_bitmap, upper_pos) == 0) {
+                        if constexpr (SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.y <= upper.y) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<true, true, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        } else if constexpr (SATISFY_LOWER_X && !SATISFY_UPPER_X) {
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.y <= upper.y
+                                    && node->items[upper_pos].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<true, false, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        } else if constexpr (!SATISFY_LOWER_X && SATISFY_UPPER_X) {
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.y <= upper.y
+                                    && node->items[upper_pos].comp.data.x >= lower.x) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<false, true, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        } else { // if constexpr (!SATISFY_LOWER_X && !SATISFY_UPPER_X)
+                            if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                                if (node->items[upper_pos].comp.data.y <= upper.y
+                                    && node->items[upper_pos].comp.data.x >= lower.x
+                                    && node->items[upper_pos].comp.data.x <= upper.x) {
+                                    results[pos++] = node->items[upper_pos].comp.data;
+                                }
+                            } else {
+                                pos = range_core_x<false, false, true, false>(
+                                    results, pos, node->items[upper_pos].comp.child, lower, upper);
+                            }
+                        }
+                    }
+                }
+            }
+            return pos;
+        }
+    }
+
+    void rangeQueryInternal2(Node* root,
+        const Point& min_key, const Point& max_key,
+        std::vector<Point>& result) {
+        typedef struct {
+            Node* node;
+            int recheck_case[2];
+        } RangeSection;
+        std::stack<RangeSection> s;
+        s.push((RangeSection){root, {0, 0}});
+        while (!s.empty()) {
+            Node* node = s.top().node;
+            int recheck_case[2] = {*s.top().recheck_case};
+            s.pop();
+
+            int axis = node->level % 2;
+            int ayis = (node->level + 1) % 2;
+
+            int min_pos = 0;
+            int max_pos = node->num_items - 1;
+
+            switch (4*recheck_case[axis] + recheck_case[ayis]) {
+                case 0:
+                    // axis: recheck min and max
+                    // ayis: recheck min and max
+                    min_pos = PREDICT_POS(node, min_key);
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                     && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
+                                     && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
+                                     && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                        result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos && i == max_pos)
+                                    new_recheck_case[axis] = 0;
+                                else if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 1:
+                    // axis: recheck min and max
+                    // ayis: recheck min
+                    min_pos = PREDICT_POS(node, min_key);
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                     && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
+                                     && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                                        result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos && i == max_pos)
+                                    new_recheck_case[axis] = 0;
+                                else if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 2:
+                    // axis: recheck min and max
+                    // ayis: recheck max
+                    min_pos = PREDICT_POS(node, min_key);
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                 && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos && i == max_pos)
+                                    new_recheck_case[axis] = 0;
+                                else if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 3:
+                    // axis: recheck min and max
+                    // ayis: no recheck
+                    min_pos = PREDICT_POS(node, min_key);
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                 && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis)))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos && i == max_pos)
+                                    new_recheck_case[axis] = 0;
+                                else if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 4:
+                    // axis: recheck min
+                    // ayis: recheck min and max
+                    min_pos = PREDICT_POS(node, min_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
+                                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 5:
+                    // axis: recheck min
+                    // ayis: recheck min
+                    min_pos = PREDICT_POS(node, min_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 6:
+                    // axis: recheck min
+                    // ayis: recheck max
+                    min_pos = PREDICT_POS(node, min_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 7:
+                    // axis: recheck min
+                    // ayis: no recheck
+                    min_pos = PREDICT_POS(node, min_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis)))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == min_pos)
+                                    new_recheck_case[axis] = 1;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 8:
+                    // axis: recheck max
+                    // ayis: recheck min and max
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
+                                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 9:
+                    // axis: recheck max
+                    // ayis: recheck min
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 10:
+                    // axis: recheck max
+                    // ayis: recheck max
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
+                                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 11:
+                    // axis: recheck max
+                    // ayis: no recheck
+                    max_pos = PREDICT_POS(node, max_key);
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis)))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                int new_recheck_case[2] = { 0 };
+                                new_recheck_case[ayis] = recheck_case[ayis];
+                                if (i == max_pos)
+                                    new_recheck_case[axis] = 2;
+                                else
+                                    new_recheck_case[axis] = 3;
+                                s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 12:
+                    // axis: no recheck
+                    // ayis: recheck min and max
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
+                                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 13:
+                    // axis: no recheck
+                    // ayis: recheck min
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                case 14:
+                    // axis: no recheck
+                    // ayis: recheck max
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                if (PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                                    result.push_back(node->items[i].comp.data);
+                            } else {
+                                s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+                default:
+                    // axis: no recheck
+                    // ayis: no recheck
+                    for (int i = min_pos; i < max_pos + 1; ++i) {
+                        if (BITMAP_GET(node->none_bitmap, i) == 0) {
+                            if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                                result.push_back(node->items[i].comp.data);
+                            } else {
+                                s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+        return;
+    }
+
+    void rangeQueryInternal3(Node* root,
+        const Point& min_key, const Point& max_key,
+        std::vector<Point> &result) {
+        
+        int min_pos = PREDICT_POS(root, min_key);
+        int max_pos = PREDICT_POS(root, max_key);
+        for (int i = min_pos; i < max_pos + 1; i ++) {
+            if (BITMAP_GET(root->none_bitmap, i) == 0) {
+                if (BITMAP_GET(root->child_bitmap, i) == 0) {
+                    if (root->items[i].comp.data.x >= min_key.x 
+                     && root->items[i].comp.data.x <= max_key.x
+                     && root->items[i].comp.data.y >= min_key.y
+                     && root->items[i].comp.data.y <= max_key.y)
+                        result.push_back(root->items[i].comp.data);
+                } else {
+                    rangeQueryInternal3(root->items[i].comp.child,
+                                       min_key, max_key,
+                                       result);
+                }
+            }
+        }
+        return;
+    }
+
+    void rangeQueryInternal(Node* root,
+        const Point& min_key, const Point& max_key,
+        std::pair<bool, bool> recheck_min, 
+        std::pair<bool, bool> recheck_max, 
+        std::vector<Point> &result) {
+
+        if (!recheck_min.first 
+         && !recheck_min.second
+         && !recheck_max.first
+         && !recheck_max.second)
+            return fullScanInternal(root, result);
+        
+        int min_pos = 0;
+        int max_pos = root->num_items-1;
+        if (PT_VAL(recheck_min, root->level))
+            min_pos = PREDICT_POS(root, min_key);
+        if (PT_VAL(recheck_max, root->level))
+            max_pos = PREDICT_POS(root, max_key);
+        for (int i = min_pos; i < max_pos + 1; i ++) {
+            if (BITMAP_GET(root->none_bitmap, i) == 0) {
+                if (root->level % 2 == 0)
+                {
+                    recheck_min.first = i == min_pos;
+                    recheck_max.first = i == max_pos;
+                }
+                else
+                {
+                    recheck_min.second = i == min_pos;
+                    recheck_max.second = i == max_pos;
+                }
+                if (BITMAP_GET(root->child_bitmap, i) == 0) {
+                    if (root->items[i].comp.data.x >= min_key.x 
+                     && root->items[i].comp.data.x <= max_key.x
+                     && root->items[i].comp.data.y >= min_key.y
+                     && root->items[i].comp.data.y <= max_key.y)
+                        result.push_back(root->items[i].comp.data);
+                } else {
+                    rangeQueryInternal(root->items[i].comp.child,
+                                       min_key, max_key, 
+                                       recheck_min, recheck_max, 
+                                       result);
+                }
+            }
+        }
+        return;
+    }
+
+    void fullScanInternal(Node* root, std::vector<Point> &result) {
+        for (int i = 0; i < root->num_items; i ++) {
+            if (BITMAP_GET(root->none_bitmap, i) == 0) {
+                if (BITMAP_GET(root->child_bitmap, i) == 0) {
+                    result.push_back(root->items[i].comp.data);
+                } else {
+                    fullScanInternal(root->items[i].comp.child, result);
+                }
+            }
+        }
+        return;
+    }
+
+
     /// build an empty tree
     Node* build_tree_none()
     {
@@ -339,16 +1401,21 @@ private:
         return node;
     }
     /// build a tree with two keys
-    Node* build_tree_two(V key1, V key2, int level)
+    Node* build_tree_two(Point key1, Point key2, int level)
     {
-        if (KEY_VALUE(key1, level) == KEY_VALUE(key2, level))
+        int axis = level % 2;
+
+        if (PT_VAL(key1, axis) == PT_VAL(key2, axis))
+        {
             level += 1;
-        if (KEY_VALUE(key1, level) > KEY_VALUE(key2, level)) {
+            axis = level % 2;
+        }
+        if (PT_VAL(key1, axis) > PT_VAL(key2, axis)) {
             std::swap(key1, key2);
         }
-        if (KEY_VALUE(key1, level) == KEY_VALUE(key2, level))
-            printf("(%d, %d), (%d, %d), %d\n", key1.first, key1.second, key2.first, key2.second, level);
-        RT_ASSERT(KEY_VALUE(key1, level) < KEY_VALUE(key2, level));
+        if (PT_VAL(key1, axis) == PT_VAL(key2, axis))
+            printf("(%d, %d), (%d, %d), %d\n", key1.x, key1.y, key2.x, key2.y, axis);
+        RT_ASSERT(PT_VAL(key1, axis) < PT_VAL(key2, axis));
         static_assert(BITMAP_WIDTH == 8);
 
         Node* node = NULL;
@@ -371,8 +1438,8 @@ private:
         }
         node->level = level;
 
-        const long double mid1_val = KEY_VALUE(key1, level);
-        const long double mid2_val = KEY_VALUE(key2, level);
+        const long double mid1_val = PT_VAL(key1, axis);
+        const long double mid2_val = PT_VAL(key2, axis);
 
         const double mid1_target = node->num_items / 3;
         const double mid2_target = node->num_items * 2 / 3;
@@ -398,7 +1465,7 @@ private:
         return node;
     }
     /// bulk build, _keys must be sorted in asc order.
-    Node* build_tree_bulk(V* _keys, int _size, int _level)
+    Node* build_tree_bulk(Point* _keys, int _size, int _level)
     {
         if (USE_FMCD) {
             return build_tree_bulk_fmcd(_keys, _size, _level);
@@ -408,7 +1475,7 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// split keys into three parts at each node.
-    Node* build_tree_bulk_fast(V* _keys, int _size, int _level)
+    Node* build_tree_bulk_fast(Point* _keys, int _size, int _level)
     {
         RT_ASSERT(_size > 1);
 
@@ -436,21 +1503,14 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                V* keys = _keys + begin;
+                Point* keys = _keys + begin;
+                const int axis = level % 2;
                 const int size = end - begin;
-                if (level % 2 == 0)
-                {
-                    std::sort(keys, keys + size, [](const std::pair<int,int> &left, const std::pair<int,int> &right) {
-                        return left.first < right.first;
-                    });
-                }
-                else
-                {
-                    std::sort(keys, keys + size, [](const std::pair<int,int> &left, const std::pair<int,int> &right) {
-                        return left.second < right.second;
-                    });
-                }
                 const int BUILD_GAP_CNT = compute_gap_count(size);
+                if (axis == 0)
+                    qsort(keys, size, sizeof(Point), &compare_x);
+                else
+                    qsort(keys, size, sizeof(Point), &compare_y);
 
                 node->level = level;
                 node->is_two = 0;
@@ -467,11 +1527,11 @@ private:
                 RT_ASSERT(mid2_pos < size - 1);
 
                 const long double mid1_key =
-                        (static_cast<long double>(KEY_VALUE(keys[mid1_pos], level))
-                            + static_cast<long double>(KEY_VALUE(keys[mid1_pos + 1], level))) / 2;
+                        (static_cast<long double>(PT_VAL(keys[mid1_pos], axis))
+                            + static_cast<long double>(PT_VAL(keys[mid1_pos + 1], axis))) / 2;
                 const long double mid2_key =
-                        (static_cast<long double>(KEY_VALUE(keys[mid2_pos], level)) 
-                            + static_cast<long double>(KEY_VALUE(keys[mid2_pos + 1], level))) / 2;
+                        (static_cast<long double>(PT_VAL(keys[mid2_pos], axis)) 
+                            + static_cast<long double>(PT_VAL(keys[mid2_pos + 1], axis))) / 2;
 
                 node->num_items = size * static_cast<int>(BUILD_GAP_CNT + 1);
                 const double mid1_target = mid1_pos * static_cast<int>(BUILD_GAP_CNT + 1) + static_cast<int>(BUILD_GAP_CNT + 1) / 2;
@@ -531,7 +1591,7 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// FMCD method.
-    Node* build_tree_bulk_fmcd(V* _keys, int _size, int _level)
+    Node* build_tree_bulk_fmcd(Point* _keys, int _size, int _level)
     {
         RT_ASSERT(_size > 1);
 
@@ -559,21 +1619,14 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                V* keys = _keys + begin;
+                Point* keys = _keys + begin;
+                const int axis = level % 2;
                 const int size = end - begin;
-                if (level % 2 == 0)
-                {
-                    std::sort(keys, keys + size, [](const std::pair<int,int> &left, const std::pair<int,int> &right) {
-                        return left.first < right.first;
-                    });
-                }
-                else
-                {
-                    std::sort(keys, keys + size, [](const std::pair<int,int> &left, const std::pair<int,int> &right) {
-                        return left.second < right.second;
-                    });
-                }
                 const int BUILD_GAP_CNT = compute_gap_count(size);
+                if (axis == 0)
+                    qsort(keys, size, sizeof(Point), &compare_x);
+                else
+                    qsort(keys, size, sizeof(Point), &compare_y);
 
                 node->level = level;
                 node->is_two = 0;
@@ -593,10 +1646,10 @@ private:
                     int i = 0;
                     int D = 1;
                     RT_ASSERT(D <= size-1-D);
-                    double Ut = (static_cast<long double>(KEY_VALUE(keys[size - 1 - D], level))  
-                        - static_cast<long double>(KEY_VALUE(keys[D], level))) / (static_cast<double>(L - 2)) + 1e-6;
+                    double Ut = (static_cast<long double>(PT_VAL(keys[size - 1 - D], axis))  
+                        - static_cast<long double>(PT_VAL(keys[D], axis))) / (static_cast<double>(L - 2)) + 1e-6;
                     while (i < size - 1 - D) {
-                        while (i + D < size && KEY_VALUE(keys[i + D], level) - KEY_VALUE(keys[i], level) >= Ut) {
+                        while (i + D < size && PT_VAL(keys[i + D], axis) - PT_VAL(keys[i], axis) >= Ut) {
                             i ++;
                         }
                         if (i + D >= size) {
@@ -605,15 +1658,15 @@ private:
                         D = D + 1;
                         if (D * 3 > size) break;
                         RT_ASSERT(D <= size-1-D);
-                        Ut = (static_cast<long double>(KEY_VALUE(keys[size - 1 - D], level)) 
-                            - static_cast<long double>(KEY_VALUE(keys[D], level))) / (static_cast<double>(L - 2)) + 1e-6;
+                        Ut = (static_cast<long double>(PT_VAL(keys[size - 1 - D], axis)) 
+                            - static_cast<long double>(PT_VAL(keys[D], axis))) / (static_cast<double>(L - 2)) + 1e-6;
                     }
                     if (D * 3 <= size) {
                         stats.fmcd_success_times ++;
 
                         node->model.a = 1.0 / Ut;
-                        node->model.b = (L - node->model.a * (static_cast<long double>(KEY_VALUE(keys[size - 1 - D], level)) +
-                                                              static_cast<long double>(KEY_VALUE(keys[D], level)))) / 2;
+                        node->model.b = (L - node->model.a * (static_cast<long double>(PT_VAL(keys[size - 1 - D], axis)) +
+                                                              static_cast<long double>(PT_VAL(keys[D], axis)))) / 2;
                         RT_ASSERT(isfinite(node->model.a));
                         RT_ASSERT(isfinite(node->model.b));
                         node->num_items = L;
@@ -627,10 +1680,10 @@ private:
                         RT_ASSERT(mid1_pos < mid2_pos);
                         RT_ASSERT(mid2_pos < size - 1);
 
-                        const long double mid1_key = (static_cast<long double>(KEY_VALUE(keys[mid1_pos], level)) +
-                                                      static_cast<long double>(KEY_VALUE(keys[mid1_pos + 1], level))) / 2;
-                        const long double mid2_key = (static_cast<long double>(KEY_VALUE(keys[mid2_pos], level)) +
-                                                      static_cast<long double>(KEY_VALUE(keys[mid2_pos + 1], level))) / 2;
+                        const long double mid1_key = (static_cast<long double>(PT_VAL(keys[mid1_pos], axis)) +
+                                                      static_cast<long double>(PT_VAL(keys[mid1_pos + 1], axis))) / 2;
+                        const long double mid2_key = (static_cast<long double>(PT_VAL(keys[mid2_pos], axis)) +
+                                                      static_cast<long double>(PT_VAL(keys[mid2_pos + 1], axis))) / 2;
 
                         node->num_items = size * static_cast<int>(BUILD_GAP_CNT + 1);
                         const double mid1_target = mid1_pos * static_cast<int>(BUILD_GAP_CNT + 1) + static_cast<int>(BUILD_GAP_CNT + 1) / 2;
@@ -735,7 +1788,7 @@ private:
         }
     }
 
-    void scan_and_destory_tree(Node* _root, V* keys, bool destory = true)
+    void scan_and_destory_tree(Node* _root, Point* keys, bool destory = true)
     {
         typedef std::pair<int, Node*> Segment; // <begin, Node*>
         std::stack<Segment> s;
@@ -744,7 +1797,9 @@ private:
         while (!s.empty()) {
             int begin = s.top().first;
             Node* node = s.top().second;
+            #ifdef DEBUG
             const int SHOULD_END_POS = begin + node->size;
+            #endif
             s.pop();
 
             for (int i = 0; i < node->num_items; i ++) {
@@ -780,7 +1835,7 @@ private:
         }
     }
 
-    Node* insert_tree(Node* _node, const V& key)
+    Node* insert_tree(Node* _node, const Point& key)
     {
         constexpr int MAX_DEPTH = 128;
         Node* path[MAX_DEPTH];
@@ -799,7 +1854,7 @@ private:
                 node->items[pos].comp.data = key;
                 break;
             } else if (BITMAP_GET(node->child_bitmap, pos) == 0) {
-                if (node->items[pos].comp.data == key)
+                if (PT_EQ(node->items[pos].comp.data, key))
                     return path[0];
                 BITMAP_SET(node->child_bitmap, pos);
                 node->items[pos].comp.child = build_tree_two(key, node->items[pos].comp.data, node->level + 1);
@@ -821,27 +1876,10 @@ private:
 
             if (need_rebuild) {
                 const int ESIZE = node->size;
-                V* keys = new V[ESIZE];
+                Point* keys = new Point[ESIZE];
 
-                #if COLLECT_TIME
-                auto start_time_scan = std::chrono::high_resolution_clock::now();
-                #endif
                 scan_and_destory_tree(node, keys);
-                #if COLLECT_TIME
-                auto end_time_scan = std::chrono::high_resolution_clock::now();
-                auto duration_scan = end_time_scan - start_time_scan;
-                stats.time_scan_and_destory_tree += std::chrono::duration_cast<std::chrono::nanoseconds>(duration_scan).count() * 1e-9;
-                #endif
-
-                #if COLLECT_TIME
-                auto start_time_build = std::chrono::high_resolution_clock::now();
-                #endif
                 Node* new_node = build_tree_bulk(keys, ESIZE, node->level);
-                #if COLLECT_TIME
-                auto end_time_build = std::chrono::high_resolution_clock::now();
-                auto duration_build = end_time_build - start_time_build;
-                stats.time_build_tree_bulk += std::chrono::duration_cast<std::chrono::nanoseconds>(duration_build).count() * 1e-9;
-                #endif
 
                 delete[] keys;
 

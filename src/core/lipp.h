@@ -131,6 +131,10 @@ public:
     std::vector<V> rangeQuery(const T& min_key, const T& max_key) {
         return rangeQueryInternal(root, min_key, max_key, true, true);
     }
+    // Find the keys which are in range [lower, upper], returns the number of found keys.
+    int range_query(T* results, const T& lower, const T& upper) const {
+        return range_core<false, false>(results, 0, root, lower, upper);
+    }
     void bulk_load(const V* vs, int num_keys) {
         if (num_keys == 0) {
             destroy_tree(root);
@@ -174,7 +178,7 @@ public:
         while (!s.empty()) {
             Node* node = s.top(); s.pop();
 
-            printf("Node(%p, a = %lf, b = %lf, num_items = %d)", node, node->model.a, node->model.b, node->num_items);
+            printf("Node(%p, a = %lf, b = %Lf, num_items = %d)", node, node->model.a, node->model.b, node->num_items);
             printf("[");
             int first = 1;
             for (int i = 0; i < node->num_items; i ++) {
@@ -346,6 +350,101 @@ private:
     void delete_bitmap(bitmap_t* p, int n)
     {
         bitmap_allocator.deallocate(p, n);
+    }
+
+    // SATISFY_LOWER = true means all the keys in the subtree of `node` are no less than to `lower`.
+    // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
+    template<bool SATISFY_LOWER, bool SATISFY_UPPER>
+    int range_core(T* results, int pos, Node* node, const T& lower, const T& upper) const
+    {
+        if constexpr (SATISFY_LOWER && SATISFY_UPPER) {
+            int bit_pos = 0;
+            const bitmap_t* none_bitmap = node->none_bitmap;
+            while (bit_pos < node->num_items) {
+                bitmap_t not_none = ~(*none_bitmap);
+                while (not_none) {
+                    int latest_pos = BITMAP_NEXT_1(not_none);
+                    not_none ^= 1 << latest_pos;
+
+                    int i = bit_pos + latest_pos;
+                    if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                        results[pos] = node->items[i].comp.data.key;
+                        // __builtin_prefetch((void*)&(node->items[i].comp.data.key) + 64);
+                        pos ++;
+                    } else {
+                        pos = range_core<true, true>(results, pos, node->items[i].comp.child, lower, upper);
+                    }
+                }
+
+                bit_pos += BITMAP_WIDTH;
+                none_bitmap ++;
+            }
+            return pos;
+        } else {
+            int lower_pos = SATISFY_LOWER ? -1 : PREDICT_POS(node, lower);
+            int upper_pos = SATISFY_UPPER ? node->num_items : PREDICT_POS(node, upper);
+            if constexpr (!SATISFY_LOWER) {
+                if (BITMAP_GET(node->none_bitmap, lower_pos) == 0) {
+                    if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                        do {
+                            if (node->items[lower_pos].comp.data.key < lower) break;
+                            if constexpr (!SATISFY_UPPER) {
+                                if (node->items[lower_pos].comp.data.key > upper) break;
+                            }
+                            results[pos] = node->items[lower_pos].comp.data.key;
+                            pos ++;
+                        } while (false);
+                    } else {
+                        if (lower_pos < upper_pos) {
+                            pos = range_core<false, true>(results, pos, node->items[lower_pos].comp.child, lower, upper);
+                        } else {
+                            pos = range_core<false, false>(results, pos, node->items[lower_pos].comp.child, lower, upper);
+                        }
+                    }
+                }
+            }
+            {
+                int bit_pos = (lower_pos + 1) / BITMAP_WIDTH * BITMAP_WIDTH;
+                const bitmap_t* none_bitmap = node->none_bitmap + bit_pos / BITMAP_WIDTH;
+                while (bit_pos < upper_pos) {
+                    bitmap_t not_none = ~(*none_bitmap);
+                    while (not_none) {
+                        int latest_pos = BITMAP_NEXT_1(not_none);
+                        not_none ^= 1 << latest_pos;
+
+                        int i = bit_pos + latest_pos;
+                        if (i <= lower_pos) continue;
+                        if (i >= upper_pos) break;
+
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            results[pos] = node->items[i].comp.data.key;
+                            // __builtin_prefetch((void*)&(node->items[i].comp.data.key) + 64);
+                            pos ++;
+                        } else {
+                            pos = range_core<true, true>(results, pos, node->items[i].comp.child, lower, upper);
+                        }
+                    }
+
+                    bit_pos += BITMAP_WIDTH;
+                    none_bitmap ++;
+                }
+            }
+            if constexpr (!SATISFY_UPPER) {
+                if (lower_pos < upper_pos) {
+                    if (BITMAP_GET(node->none_bitmap, upper_pos) == 0) {
+                        if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                            if (node->items[upper_pos].comp.data.key <= upper) {
+                                results[pos] = node->items[upper_pos].comp.data.key;
+                                pos ++;
+                            }
+                        } else {
+                            pos = range_core<true, false>(results, pos, node->items[upper_pos].comp.child, lower, upper);
+                        }
+                    }
+                }
+            }
+            return pos;
+        }
     }
 
     std::vector<V> rangeQueryInternal(Node* root,
@@ -804,7 +903,9 @@ private:
         while (!s.empty()) {
             int begin = s.top().first;
             Node* node = s.top().second;
+            #ifdef DEBUG
             const int SHOULD_END_POS = begin + node->size;
+            #endif
             s.pop();
 
             for (int i = 0; i < node->num_items; i ++) {

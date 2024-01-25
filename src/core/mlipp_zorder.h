@@ -13,15 +13,13 @@
 #include "lipp_base.h"
 #include "lipp_utils.h"
 #include "morton.h"
+#include "point.h"
 
 using namespace libmorton;
 
 template<class T, bool USE_FMCD = true>
 class MLIPP_Z
 {
-    static_assert(std::is_arithmetic<T>::value, "MLIPP_Z key type must be numeric.");
-
-    typedef std::pair<T, T> V;
     typedef uint_fast64_t Z;
 
     inline int compute_gap_count(int size) {
@@ -30,17 +28,18 @@ class MLIPP_Z
         return 5;
     }
 
-    inline Z encode(const V& key) {
-        return morton2D_64_encode(key.first, key.second);
+    inline Z encode(const Point& key) const {
+        return morton2D_64_encode(key.x, key.y);
     }
 
-    inline V decode(const Z& zkey) {
+    inline Point decode(const Z& zkey) const {
         uint_fast32_t x_uint;
         uint_fast32_t y_uint;
         morton2D_64_decode(zkey, x_uint, y_uint);
-        T x = static_cast<T>(x_uint);
-        T y = static_cast<T>(y_uint);
-        return make_pair(x, y);
+        Point key;
+        key.x = static_cast<int>(x_uint);
+        key.y = static_cast<int>(y_uint);
+        return key;
     }
 
     struct Node;
@@ -74,7 +73,7 @@ public:
         /*{
             std::vector<Node*> nodes;
             for (int _ = 0; _ < 1e7; _ ++) {
-                Node* node = build_tree_two(V(0, 0), V(1, 1));
+                Node* node = build_tree_two(Point(0, 0), Point(1, 1));
                 nodes.push_back(node);
             }
             for (auto node : nodes) {
@@ -96,10 +95,10 @@ public:
         destory_pending();
     }
 
-    void insert(const V& key) {
+    void insert(const Point& key) {
         root = insert_tree(root, key);
     }
-    bool exists(const V& key) {
+    bool exists(const Point& key) {
         const Z zkey = encode(key);
         Node* node = root;
         while (true) {
@@ -107,13 +106,25 @@ public:
             if (BITMAP_GET(node->none_bitmap, pos) == 1) {
                 return false;
             } else if (BITMAP_GET(node->child_bitmap, pos) == 0) {
-                return node->items[pos].comp.data == key;
+                return PT_EQ(node->items[pos].comp.data, key);
             } else {
                 node = node->items[pos].comp.child;
             }
         }
     }
-    void bulk_load(V* vs, int num_keys) {
+    void rangeQuery(const Point& min_key, const Point& max_key, std::vector<Point> &result) {
+        const Z min_zkey = encode(min_key);
+        const Z max_zkey = encode(max_key);
+        rangeQueryInternal(root, min_key, max_key, min_zkey, max_zkey, result);
+        return;
+    }
+    // Find the keys which are in range [lower, upper], returns the number of found keys.
+    int range_query(const Point& lower, const Point& upper, Point* results) const {
+        const Z zlower = encode(lower);
+        const Z zupper = encode(upper);
+        return range_core<false, false>(results, 0, root, lower, upper, zlower, zupper);
+    }
+    void bulk_load(Point* vs, int num_keys) {
         if (num_keys == 0) {
             destroy_tree(root);
             root = build_tree_none();
@@ -133,7 +144,7 @@ public:
 
         RT_ASSERT(num_keys > 2);
         /*for (int i = 1; i < num_keys; i ++) {
-            RT_ASSERT(vs[i].first > vs[i-1].first);
+            RT_ASSERT(vs[i].x > vs[i-1].x);
         }*/
 
         destroy_tree(root);
@@ -150,12 +161,12 @@ public:
 
             printf("Node(%p, a = %lf, b = %lf, num_items = %d)", node, node->model.a, node->model.b, node->num_items);
             printf("[");
-            int first = 1;
+            int x = 1;
             for (int i = 0; i < node->num_items; i ++) {
-                if (!first) {
+                if (!x) {
                     printf(", ");
                 }
-                first = 0;
+                x = 0;
                 if (BITMAP_GET(node->none_bitmap, i) == 1) {
                     printf("None");
                 } else if (BITMAP_GET(node->child_bitmap, i) == 0) {
@@ -258,7 +269,7 @@ private:
     struct Item
     {
         union {
-            V data;
+            Point data;
             Node* child;
         } comp;
     };
@@ -315,6 +326,156 @@ private:
         bitmap_allocator.deallocate(p, n);
     }
 
+    // SATISFY_LOWER = true means all the keys in the subtree of `node` are no less than to `lower`.
+    // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
+    template<bool SATISFY_LOWER, bool SATISFY_UPPER>
+    int range_core(Point* results, int pos, Node* node, 
+        const Point& lower, const Point& upper,
+        const Z zlower, const Z zupper) const
+    {
+        if constexpr (SATISFY_LOWER && SATISFY_UPPER) {
+            int bit_pos = 0;
+            const bitmap_t* none_bitmap = node->none_bitmap;
+            while (bit_pos < node->num_items) {
+                bitmap_t not_none = ~(*none_bitmap);
+                while (not_none) {
+                    int latest_pos = BITMAP_NEXT_1(not_none);
+                    not_none ^= 1 << latest_pos;
+
+                    int i = bit_pos + latest_pos;
+                    if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                        if (node->items[i].comp.data.x >= lower.x 
+                         && node->items[i].comp.data.x <= upper.x
+                         && node->items[i].comp.data.y >= lower.y
+                         && node->items[i].comp.data.y <= upper.y)
+                        {
+                            results[pos] = node->items[i].comp.data;
+                            pos++;
+                        }
+                    } else {
+                        pos = range_core<true, true>(results, pos, node->items[i].comp.child, 
+                            lower, upper, zlower, zupper);
+                    }
+                }
+
+                bit_pos += BITMAP_WIDTH;
+                none_bitmap ++;
+            }
+            return pos;
+        } else {
+            int lower_pos = SATISFY_LOWER ? -1 : PREDICT_POS(node, zlower);
+            int upper_pos = SATISFY_UPPER ? node->num_items : PREDICT_POS(node, zupper);
+            if constexpr (!SATISFY_LOWER) {
+                if (BITMAP_GET(node->none_bitmap, lower_pos) == 0) {
+                    if (BITMAP_GET(node->child_bitmap, lower_pos) == 0) {
+                        do {
+                            if (encode(node->items[lower_pos].comp.data) < zlower) break;
+                            if constexpr (!SATISFY_UPPER) {
+                                if (encode(node->items[lower_pos].comp.data) > zupper) break;
+                            }
+                            if (node->items[lower_pos].comp.data.x >= lower.x 
+                             && node->items[lower_pos].comp.data.x <= upper.x
+                             && node->items[lower_pos].comp.data.y >= lower.y
+                             && node->items[lower_pos].comp.data.y <= upper.y)
+                            {
+                                results[pos] = node->items[lower_pos].comp.data;
+                                pos++;
+                            }
+                        } while (false);
+                    } else {
+                        if (lower_pos < upper_pos) {
+                            pos = range_core<false, true>(results, pos, node->items[lower_pos].comp.child, 
+                                lower, upper, zlower, zupper);
+                        } else {
+                            pos = range_core<false, false>(results, pos, node->items[lower_pos].comp.child, 
+                                lower, upper, zlower, zupper);
+                        }
+                    }
+                }
+            }
+            {
+                int bit_pos = (lower_pos + 1) / BITMAP_WIDTH * BITMAP_WIDTH;
+                const bitmap_t* none_bitmap = node->none_bitmap + bit_pos / BITMAP_WIDTH;
+                while (bit_pos < upper_pos) {
+                    bitmap_t not_none = ~(*none_bitmap);
+                    while (not_none) {
+                        int latest_pos = BITMAP_NEXT_1(not_none);
+                        not_none ^= 1 << latest_pos;
+
+                        int i = bit_pos + latest_pos;
+                        if (i <= lower_pos) continue;
+                        if (i >= upper_pos) break;
+
+                        if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                            if (node->items[i].comp.data.x >= lower.x 
+                             && node->items[i].comp.data.x <= upper.x
+                             && node->items[i].comp.data.y >= lower.y
+                             && node->items[i].comp.data.y <= upper.y)
+                            {
+                                results[pos] = node->items[i].comp.data;
+                                pos++;
+                            }
+                        } else {
+                            pos = range_core<true, true>(results, pos, node->items[i].comp.child, 
+                                lower, upper, zlower, zupper);
+                        }
+                    }
+
+                    bit_pos += BITMAP_WIDTH;
+                    none_bitmap ++;
+                }
+            }
+            if constexpr (!SATISFY_UPPER) {
+                if (lower_pos < upper_pos) {
+                    if (BITMAP_GET(node->none_bitmap, upper_pos) == 0) {
+                        if (BITMAP_GET(node->child_bitmap, upper_pos) == 0) {
+                            if (encode(node->items[upper_pos].comp.data) <= zupper) {
+                                if (node->items[upper_pos].comp.data.x >= lower.x 
+                                 && node->items[upper_pos].comp.data.x <= upper.x
+                                 && node->items[upper_pos].comp.data.y >= lower.y
+                                 && node->items[upper_pos].comp.data.y <= upper.y)
+                                {
+                                    results[pos] = node->items[upper_pos].comp.data;
+                                    pos++;
+                                }
+                            }
+                        } else {
+                            pos = range_core<true, false>(results, pos, node->items[upper_pos].comp.child, 
+                                lower, upper, zlower, zupper);
+                        }
+                    }
+                }
+            }
+            return pos;
+        }
+    }
+
+    void rangeQueryInternal(Node* root,
+        const Point& min_key, const Point& max_key,
+        const Z& min_zkey, const Z& max_zkey,
+        std::vector<Point> &result) {
+        
+        int min_pos = PREDICT_POS(root, min_zkey);
+        int max_pos = PREDICT_POS(root, max_zkey);
+        for (int i = min_pos; i < max_pos + 1; i ++) {
+            if (BITMAP_GET(root->none_bitmap, i) == 0) {
+                if (BITMAP_GET(root->child_bitmap, i) == 0) {
+                    if (root->items[i].comp.data.x >= min_key.x 
+                     && root->items[i].comp.data.x <= max_key.x
+                     && root->items[i].comp.data.y >= min_key.y
+                     && root->items[i].comp.data.y <= max_key.y)
+                        result.push_back(root->items[i].comp.data);
+                } else {
+                    rangeQueryInternal(root->items[i].comp.child,
+                                       min_key, max_key,
+                                       min_zkey, max_zkey,
+                                       result);
+                }
+            }
+        }
+        return;
+    }
+
     /// build an empty tree
     Node* build_tree_none()
     {
@@ -336,7 +497,7 @@ private:
         return node;
     }
     /// build a tree with two keys
-    Node* build_tree_two(V key1, Z zkey1, V key2, Z zkey2)
+    Node* build_tree_two(Point key1, Z zkey1, Point key2, Z zkey2)
     {
         if (zkey1 > zkey2) {
             std::swap(key1, key2);
@@ -391,7 +552,7 @@ private:
         return node;
     }
     /// bulk build, _keys must be sorted in asc order.
-    Node* build_tree_bulk(V* _keys, int _size, bool sorted)
+    Node* build_tree_bulk(Point* _keys, int _size, bool sorted)
     {
         if (USE_FMCD) {
             return build_tree_bulk_fmcd(_keys, _size, sorted);
@@ -401,17 +562,19 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// split keys into three parts at each node.
-    Node* build_tree_bulk_fast(V* _keys, int _size, bool sorted)
+    Node* build_tree_bulk_fast(Point* _keys, int _size, bool sorted)
     {
         Z* _zkeys = new Z[_size];
         for (int i = 0; i < _size; ++i)
             _zkeys[i] = encode(_keys[i]);
         if (!sorted)
         {
-            std::pair<Z, V>* pairs = new std::pair<Z, V>[_size];
+            std::pair<Z, Point>* pairs = new std::pair<Z, Point>[_size];
             for (int i = 0; i < _size; ++i )
-              pairs[i] = make_pair(_zkeys[i], _keys[i]);
-            std::sort(pairs, pairs + _size);
+              pairs[i] = std::make_pair(_zkeys[i], _keys[i]);
+            std::sort(pairs, pairs + _size, [](std::pair<Z, Point> &left, std::pair<Z, Point> &right) {
+                return left.first < right.first;
+            });
             for (int i = 0; i < _size; ++i )
             {
               _zkeys[ i ] = pairs[i].first;
@@ -446,7 +609,7 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                V* keys = _keys + begin;
+                Point* keys = _keys + begin;
                 Z* zkeys = _zkeys + begin;
                 const int size = end - begin;
                 const int BUILD_GAP_CNT = compute_gap_count(size);
@@ -529,17 +692,19 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// FMCD method.
-    Node* build_tree_bulk_fmcd(V* _keys, int _size, bool sorted)
+    Node* build_tree_bulk_fmcd(Point* _keys, int _size, bool sorted)
     {
         Z* _zkeys = new Z[_size];
         for (int i = 0; i < _size; ++i)
             _zkeys[i] = encode(_keys[i]);
         if (!sorted)
         {
-            std::pair<Z, V>* pairs = new std::pair<Z, V>[_size];
+            std::pair<Z, Point>* pairs = new std::pair<Z, Point>[_size];
             for (int i = 0; i < _size; ++i )
-                pairs[i] = make_pair(_zkeys[i], _keys[i]);
-            std::sort(pairs, pairs + _size);
+                pairs[i] = std::make_pair(_zkeys[i], _keys[i]);
+            std::sort(pairs, pairs + _size, [](std::pair<Z, Point> &left, std::pair<Z, Point> &right) {
+                return left.first < right.first;
+            });
             for (int i = 0; i < _size; ++i )
             {
               _zkeys[ i ] = pairs[i].first;
@@ -574,7 +739,7 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                V* keys = _keys + begin;
+                Point* keys = _keys + begin;
                 Z* zkeys = _zkeys + begin;
                 const int size = end - begin;
                 const int BUILD_GAP_CNT = compute_gap_count(size);
@@ -740,7 +905,7 @@ private:
         }
     }
 
-    void scan_and_destory_tree(Node* _root, V* keys, bool destory = true)
+    void scan_and_destory_tree(Node* _root, Point* keys, bool destory = true)
     {
         typedef std::pair<int, Node*> Segment; // <begin, Node*>
         std::stack<Segment> s;
@@ -749,7 +914,9 @@ private:
         while (!s.empty()) {
             int begin = s.top().first;
             Node* node = s.top().second;
+            #ifdef DEBUG
             const int SHOULD_END_POS = begin + node->size;
+            #endif
             s.pop();
 
             for (int i = 0; i < node->num_items; i ++) {
@@ -785,7 +952,7 @@ private:
         }
     }
 
-    Node* insert_tree(Node* _node, const V& key)
+    Node* insert_tree(Node* _node, const Point& key)
     {
         const Z zkey = encode(key);
         constexpr int MAX_DEPTH = 128;
@@ -825,7 +992,7 @@ private:
 
             if (need_rebuild) {
                 const int ESIZE = node->size;
-                V* keys = new V[ESIZE];
+                Point* keys = new Point[ESIZE];
 
                 scan_and_destory_tree(node, keys);
                 Node* new_node = build_tree_bulk(keys, ESIZE, true);

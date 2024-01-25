@@ -628,7 +628,9 @@ private:
         while (!s.empty()) {
             int begin = s.top().first;
             Node* node = s.top().second;
+            #ifdef DEBUG
             const int SHOULD_END_POS = begin + node->size;
+            #endif
             s.pop();
 
             for (int i = 0; i < node->num_items; i ++) {

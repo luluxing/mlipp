@@ -133,14 +133,17 @@ range_test(int n_loop)
     } while (xmax.first <= xmin.first);
 
     std::vector<Point> seq_result = seqRangeQuery(data, xmin, xmax);
-    std::vector<Point> lipp_result = lipp.rangeQuery(xmin.first, xmax.first);
+    std::vector<int> lipp_result(seq_result.size());
+    int result_size = 0;
 
-    printf("n_seq = %d, n_lipp = %d\n", int(seq_result.size()), int(lipp_result.size()));
-    if (seq_result.size() == lipp_result.size())
+    result_size = lipp.range_query(lipp_result.data(), xmin.first, xmax.first);
+
+    printf("n_seq = %d, n_lipp = %d\n", int(seq_result.size()), result_size);
+    if (int(seq_result.size()) == result_size)
     {
         for (uint i = 0; i < seq_result.size(); ++i)
         {
-            if (seq_result[i].first != lipp_result[i].first)
+            if (seq_result[i].first != lipp_result[i])
                 printf("Not equal, %d\n", i);
         }
     }
@@ -150,11 +153,11 @@ int main()
 {
     srand(time(NULL));
 
-    run(1e6);
-    for (int n = 5e6; n < 1e8; n += 5e6)
-        run(n);
+    // run(1e6);
+    // for (int n = 5e6; n < 1e8; n += 5e6)
+    //     run(n);
 
-    // range_test(1000000);
+    range_test(100000);
 
     return 0;
 }

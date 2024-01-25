@@ -1,17 +1,26 @@
-#include <mlipp_zorder.h>
 #include <iostream>
 #include <stdlib.h>
 #include <time.h>
 #include <chrono>
 
+#include "mlipp_zorder.h"
+#include "point.h"
+
 using namespace std;
 
-typedef pair<int, int> Point;
-
-bool sortbyfirst(const Point &a,
-              const Point &b)
+vector<Point> seqRangeQuery(vector<Point> points, 
+    Point min_key, Point max_key)
 {
-    return (a.first < b.first);
+    vector<Point> result;
+    for (uint i = 0; i < points.size(); ++i)
+    {
+        if (points[i].x >= min_key.x 
+            && points[i].x <= max_key.x
+            && points[i].y >= min_key.y
+            && points[i].y <= max_key.y)
+            result.push_back(points[i]);
+    }
+    return result;
 }
 
 void
@@ -22,7 +31,7 @@ run(int n)
 
     vector<Point> data;
     for (int i = 0; i < n; ++i)
-        data.push_back(make_pair(rand(), rand()));
+        data.push_back((Point){rand(), rand()});
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -73,13 +82,68 @@ run(int n)
     << endl;
 }
 
+void
+range_test(int n)
+{
+    MLIPP_Z<int> mlipp_z;
+
+    vector<Point> data;
+    for (int i = 0; i < n; ++i)
+        data.push_back((Point){rand(), rand()});
+
+    // for (int i = 0; i < n; ++i)
+    //     mlipp_z.insert(data[i]);
+
+    mlipp_z.bulk_load(data.data(), data.size());
+
+    int x1 = rand();
+    int x2 = rand();
+    int y1 = rand();
+    int y2 = rand();
+    Point min_point = (Point){std::min(x1, x2), std::min(y1, y2)};
+    Point max_point = (Point){std::max(x1, x2), std::max(y1, y2)};
+
+    std::vector<Point> seq_result = seqRangeQuery(data, min_point, max_point);
+    std::vector<Point> mlipp_z_result(n);
+    int result_size = 0;
+
+    printf("Total size = %d, Result size = %d\n", n, int(seq_result.size()));
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    result_size = mlipp_z.range_query(min_point, max_point, mlipp_z_result.data());
+
+    auto end_time = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;
+    cout << "Duration: range = " << duration << endl;
+    cout << "Duration / size: range = " << duration / result_size << endl;
+
+
+    qsort(seq_result.data(), seq_result.size(), sizeof(Point), &compare_pt);
+    qsort(mlipp_z_result.data(), result_size, sizeof(Point), &compare_pt);
+
+    if (int(seq_result.size()) == result_size)
+    {
+        for (uint i = 0; i < seq_result.size(); ++i)
+        {
+            if (seq_result[i].x != mlipp_z_result[i].x 
+             || seq_result[i].y != mlipp_z_result[i].y)
+                printf("Not equal, %d\n", i);
+        }
+    }
+    else
+        printf("Range: n_seq = %d, n_mlipp_z = %d\n", int(seq_result.size()), result_size);
+}
+
 int main()
 {
     srand(time(NULL));
 
-    run(1e6);
-    for (int n = 5e6; n < 1e8; n += 5e6)
-        run(n);
+    // run(1e6);
+    // for (int n = 5e6; n < 1e8; n += 5e6)
+    //     run(n);
+
+    range_test(1000000);
 
     return 0;
 }
