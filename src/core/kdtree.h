@@ -37,7 +37,7 @@ kd_bulk_internal(Point* points, int size, int depth, int *max_depth, KDNode* roo
     else if (size == 1)
     {
         set_kd_node(&root[pos++], points[0]);
-        if (depth > (*max_depth))
+        if (max_depth && depth > (*max_depth))
             *max_depth = depth;
         return pos;
     }
@@ -329,6 +329,16 @@ kd_depth(KDNode* root, int depth,
     *sum_depth = sdl + sdr + depth;
     *sum_nodes = snl + snr + 1;
     return;
+}
+
+// Define a function to compute the size of a kd-tree
+size_t
+kd_size(KDNode* root) {
+    if (root == NULL)
+        return 0;
+    return sizeof(KDNode) 
+        + kd_size(root->left) 
+        + kd_size(root->right);
 }
 
 // Define a function to destroy a kd-tree

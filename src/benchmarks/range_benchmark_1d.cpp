@@ -90,7 +90,7 @@ void run_kdtree(vector<Point> data,
 
 void run(uint num_points, uint num_fracs, uint iters_per_frac)
 {
-    Point data_min = (Point){RAND_MAX, RAND_MAX},
+    Point data_min = (Point){(float) RAND_MAX, (float) RAND_MAX},
           data_max = (Point){0, 0};
     vector<Point> data_raw(num_points);
     for (uint i = 0; i < num_points; ++i)

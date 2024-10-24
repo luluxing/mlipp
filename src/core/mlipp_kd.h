@@ -1413,8 +1413,8 @@ private:
         if (PT_VAL(key1, axis) > PT_VAL(key2, axis)) {
             std::swap(key1, key2);
         }
-        if (PT_VAL(key1, axis) == PT_VAL(key2, axis))
-            printf("(%d, %d), (%d, %d), %d\n", key1.x, key1.y, key2.x, key2.y, axis);
+        // if (PT_VAL(key1, axis) == PT_VAL(key2, axis))
+        //     printf("(%d, %d), (%d, %d), %d\n", key1.x, key1.y, key2.x, key2.y, axis);
         RT_ASSERT(PT_VAL(key1, axis) < PT_VAL(key2, axis));
         static_assert(BITMAP_WIDTH == 8);
 
