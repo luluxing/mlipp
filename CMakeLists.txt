@@ -1,4 +1,4 @@
-project(lipp)
+project(mlipp)
 cmake_minimum_required(VERSION 2.9)
 
 set(default_build_type "Release")
@@ -35,3 +35,27 @@ add_executable(example_mlipp src/examples/example_mlipp.cpp)
 # add_executable(point_benchmark src/benchmarks/point_benchmark.cpp)
 # add_executable(range_benchmark src/benchmarks/range_benchmark.cpp)
 # add_executable(range_benchmark_1d src/benchmarks/range_benchmark_1d.cpp)
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+
+# Enable testing
+enable_testing()
+add_executable(
+  mlipp_kd_test
+  test/test_mlipp_kd.cc
+)
+target_link_libraries(
+  mlipp_kd_test
+  GTest::gtest_main
+)
+
+include(GoogleTest)
+gtest_discover_tests(mlipp_kd_test)
