@@ -32,13 +32,13 @@ run(int n)
     /* Generate random data */
     vector<Point> data;
     for (int i = 0; i < n; ++i)
-        data.push_back((Point){rand(), rand()});
+      data.push_back((Point){(double) rand() / RAND_MAX, (double) rand() / RAND_MAX});
 
     /* Generate a random range */
-    int x1 = rand();
-    int x2 = rand();
-    int y1 = rand();
-    int y2 = rand();
+    double x1 = (double) rand() / RAND_MAX;
+    double x2 = (double) rand() / RAND_MAX;
+    double y1 = (double) rand() / RAND_MAX;
+    double y2 = (double) rand() / RAND_MAX;
     Point min_point = (Point){std::min(x1, x2), std::min(y1, y2)};
     Point max_point = (Point){std::max(x1, x2), std::max(y1, y2)};
 
@@ -66,11 +66,11 @@ run(int n)
 
     start_time = std::chrono::high_resolution_clock::now();
 
-    int seq_count, kd_count;
+    int kd_count;
     vector<Point> seq_result = seq_range_query(data, min_point, max_point);
-    Point *kd_result;
+    // Point *kd_result;
 
-    kd_result = kd_range(root, min_point, max_point, 0, max_depth, &kd_count);
+    // kd_result = kd_range(root, min_point, max_point, 0, max_depth, &kd_count);
 
     end_time = chrono::high_resolution_clock::now();
     auto range_duration = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count() * 1e-9;

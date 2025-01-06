@@ -27,7 +27,7 @@ class MLIPP_KD
     }
 
     struct Node;
-    inline int PREDICT_POS(Node* node, const Point& key) const {
+    inline int PREDICT_POS(Node* node, const Point<T>& key) const {
         double v = node->model.predict_double(PT_VAL(key, node->level % 2));
         if (v > std::numeric_limits<int>::max() / 2) {
             return node->num_items - 1;
@@ -79,10 +79,10 @@ public:
         destory_pending();
     }
 
-    void insert(const Point& key) {
+    void insert(const Point<T>& key) {
         root = insert_tree(root, key);
     }
-    bool exists(const Point& key) const {
+    bool exists(const Point<T>& key) const {
         Node* node = root;
         while (true) {
             int pos = PREDICT_POS(node, key);
@@ -95,7 +95,9 @@ public:
             }
         }
     }
-    void rangeQuery(const Point& min_key, const Point& max_key, std::vector<Point>& result) {
+    void rangeQuery(const Point<T>& min_key,
+                    const Point<T>& max_key,
+                    std::vector<Point<T>>& result) {
         rangeQueryInternal2(root, min_key, max_key, result);
         /*rangeQueryInternal(root, min_key, max_key,
             std::make_pair(true, true), 
@@ -104,13 +106,13 @@ public:
         return;
     }
     // Find the keys which are in range [lower, upper], returns the number of found keys.
-    int range_query(const Point& lower, const Point& upper, Point* results) const {
+    int range_query(const Point<T>& lower, const Point<T>& upper, Point<T>* results) const {
         return range_core_x<false, false, false, false>(results, 0, root, lower, upper);
     }
-    int knn_query(const Point& key, int k, Point* results, double* distances) {
+    int knn_query(const Point<T>& key, int k, Point<T>* results, double* distances) {
         return knn_core(root, key, k, results, distances);
     }
-    void bulk_load(Point* vs, int num_keys) {
+    void bulk_load(Point<T>* vs, int num_keys) {
 
         if (num_keys == 0) {
             destroy_tree(root);
@@ -256,7 +258,7 @@ private:
     struct Item
     {
         union {
-            Point data;
+            Point<T> data;
             Node* child;
         } comp;
     };
@@ -314,8 +316,8 @@ private:
         bitmap_allocator.deallocate(p, n);
     }
 
-    int knn_core(Node* root, const Point& key, int k,
-        Point* results, double* distances)
+    int knn_core(Node* root, const Point<T>& key, int k,
+        Point<T>* results, double* distances)
     {
         double maxDist = DBL_MAX;
         int n = 0;
@@ -338,7 +340,7 @@ private:
             if (BITMAP_GET(node->none_bitmap, pos) == 0) {
                 if (BITMAP_GET(node->child_bitmap, pos) == 0) {
                     /* It's a data point */
-                    Point p = node->items[pos].comp.data;
+                    Point<T> p = node->items[pos].comp.data;
                     double dist = pow(p.x - key.x, 2) + pow(p.y - key.y, 2);
                     // printf("Distance = %f\n", sqrt(dist));
                     if (dist < maxDist) {
@@ -348,7 +350,7 @@ private:
                             i--;
                         /* Insert it into KNN list */
                         int shift_count = n < k ? n - i : n - i - 1;
-                        memmove(&results[i + 1], &results[i], sizeof(Point)*shift_count);
+                        memmove(&results[i + 1], &results[i], sizeof(Point<T>)*shift_count);
                         memmove(&distances[i + 1], &distances[i], sizeof(double)*shift_count);
                         results[i] = p;
                         distances[i] = dist;
@@ -426,7 +428,7 @@ private:
     // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
     template<bool SATISFY_LOWER_X, bool SATISFY_UPPER_X, 
              bool SATISFY_LOWER_Y, bool SATISFY_UPPER_Y>
-    int range_core_x(Point* results, int pos, Node* node, const Point& lower, const Point& upper) const
+    int range_core_x(Point<T>* results, int pos, Node* node, const Point<T>& lower, const Point<T>& upper) const
     {
         if constexpr (SATISFY_LOWER_X && SATISFY_UPPER_X) {
             int bit_pos = 0;
@@ -677,7 +679,7 @@ private:
     // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
     template<bool SATISFY_LOWER_Y, bool SATISFY_UPPER_Y, 
              bool SATISFY_LOWER_X, bool SATISFY_UPPER_X>
-    int range_core_y(Point* results, int pos, Node* node, const Point& lower, const Point& upper) const
+    int range_core_y(Point<T>* results, int pos, Node* node, const Point<T>& lower, const Point<T>& upper) const
     {
         if constexpr (SATISFY_LOWER_Y && SATISFY_UPPER_Y) {
             int bit_pos = 0;
@@ -925,8 +927,8 @@ private:
     }
 
     void rangeQueryInternal2(Node* root,
-        const Point& min_key, const Point& max_key,
-        std::vector<Point>& result) {
+        const Point<T>& min_key, const Point<T>& max_key,
+        std::vector<Point<T>>& result) {
         typedef struct {
             Node* node;
             int recheck_case[2];
@@ -1295,8 +1297,8 @@ private:
     }
 
     void rangeQueryInternal3(Node* root,
-        const Point& min_key, const Point& max_key,
-        std::vector<Point> &result) {
+        const Point<T>& min_key, const Point<T>& max_key,
+        std::vector<Point<T>> &result) {
         
         int min_pos = PREDICT_POS(root, min_key);
         int max_pos = PREDICT_POS(root, max_key);
@@ -1319,10 +1321,10 @@ private:
     }
 
     void rangeQueryInternal(Node* root,
-        const Point& min_key, const Point& max_key,
+        const Point<T>& min_key, const Point<T>& max_key,
         std::pair<bool, bool> recheck_min, 
         std::pair<bool, bool> recheck_max, 
-        std::vector<Point> &result) {
+        std::vector<Point<T>> &result) {
 
         if (!recheck_min.first 
          && !recheck_min.second
@@ -1332,9 +1334,9 @@ private:
         
         int min_pos = 0;
         int max_pos = root->num_items-1;
-        if (PT_VAL(recheck_min, root->level))
+        if (PAIR_VAL(recheck_min, root->level))
             min_pos = PREDICT_POS(root, min_key);
-        if (PT_VAL(recheck_max, root->level))
+        if (PAIR_VAL(recheck_max, root->level))
             max_pos = PREDICT_POS(root, max_key);
         for (int i = min_pos; i < max_pos + 1; i ++) {
             if (BITMAP_GET(root->none_bitmap, i) == 0) {
@@ -1365,7 +1367,7 @@ private:
         return;
     }
 
-    void fullScanInternal(Node* root, std::vector<Point> &result) {
+    void fullScanInternal(Node* root, std::vector<Point<T>> &result) {
         for (int i = 0; i < root->num_items; i ++) {
             if (BITMAP_GET(root->none_bitmap, i) == 0) {
                 if (BITMAP_GET(root->child_bitmap, i) == 0) {
@@ -1401,7 +1403,7 @@ private:
         return node;
     }
     /// build a tree with two keys
-    Node* build_tree_two(Point key1, Point key2, int level)
+    Node* build_tree_two(Point<T> key1, Point<T> key2, int level)
     {
         int axis = level % 2;
 
@@ -1465,7 +1467,7 @@ private:
         return node;
     }
     /// bulk build, _keys must be sorted in asc order.
-    Node* build_tree_bulk(Point* _keys, int _size, int _level)
+    Node* build_tree_bulk(Point<T>* _keys, int _size, int _level)
     {
         if (USE_FMCD) {
             return build_tree_bulk_fmcd(_keys, _size, _level);
@@ -1475,7 +1477,7 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// split keys into three parts at each node.
-    Node* build_tree_bulk_fast(Point* _keys, int _size, int _level)
+    Node* build_tree_bulk_fast(Point<T>* _keys, int _size, int _level)
     {
         RT_ASSERT(_size > 1);
 
@@ -1503,14 +1505,14 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                Point* keys = _keys + begin;
+                Point<T>* keys = _keys + begin;
                 const int axis = level % 2;
                 const int size = end - begin;
                 const int BUILD_GAP_CNT = compute_gap_count(size);
                 if (axis == 0)
-                    qsort(keys, size, sizeof(Point), &compare_x);
+                    qsort(keys, size, sizeof(Point<T>), &compare_x<T>);
                 else
-                    qsort(keys, size, sizeof(Point), &compare_y);
+                    qsort(keys, size, sizeof(Point<T>), &compare_y<T>);
 
                 node->level = level;
                 node->is_two = 0;
@@ -1591,7 +1593,7 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// FMCD method.
-    Node* build_tree_bulk_fmcd(Point* _keys, int _size, int _level)
+    Node* build_tree_bulk_fmcd(Point<T>* _keys, int _size, int _level)
     {
         RT_ASSERT(_size > 1);
 
@@ -1619,14 +1621,14 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                Point* keys = _keys + begin;
+                Point<T>* keys = _keys + begin;
                 const int axis = level % 2;
                 const int size = end - begin;
                 const int BUILD_GAP_CNT = compute_gap_count(size);
                 if (axis == 0)
-                    qsort(keys, size, sizeof(Point), &compare_x);
+                    qsort(keys, size, sizeof(Point<T>), &compare_x<T>);
                 else
-                    qsort(keys, size, sizeof(Point), &compare_y);
+                    qsort(keys, size, sizeof(Point<T>), &compare_y<T>);
 
                 node->level = level;
                 node->is_two = 0;
@@ -1788,7 +1790,7 @@ private:
         }
     }
 
-    void scan_and_destory_tree(Node* _root, Point* keys, bool destory = true)
+    void scan_and_destory_tree(Node* _root, Point<T>* keys, bool destory = true)
     {
         typedef std::pair<int, Node*> Segment; // <begin, Node*>
         std::stack<Segment> s;
@@ -1835,7 +1837,7 @@ private:
         }
     }
 
-    Node* insert_tree(Node* _node, const Point& key)
+    Node* insert_tree(Node* _node, const Point<T>& key)
     {
         constexpr int MAX_DEPTH = 128;
         Node* path[MAX_DEPTH];
@@ -1876,7 +1878,7 @@ private:
 
             if (need_rebuild) {
                 const int ESIZE = node->size;
-                Point* keys = new Point[ESIZE];
+                Point<T>* keys = new Point<T>[ESIZE];
 
                 scan_and_destory_tree(node, keys);
                 Node* new_node = build_tree_bulk(keys, ESIZE, node->level);

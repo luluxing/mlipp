@@ -13,12 +13,12 @@ TEST(PointTest, PointComparison) {
   Point<int> p1 = {1, 5};
   Point<int> p2 = {1, 5};
   Point<int> p3 = {2, 3};
-  EXPECT_EQ(Point<int>::compare_x(&p1, &p2), 0);
-  EXPECT_EQ(Point<int>::compare_y(&p1, &p2), 0);
-  EXPECT_EQ(Point<int>::compare_pt(&p1, &p2), 0);
-  EXPECT_EQ(Point<int>::compare_x(&p1, &p3), -1);
-  EXPECT_EQ(Point<int>::compare_y(&p1, &p3), 1);
-  EXPECT_EQ(Point<int>::compare_pt(&p1, &p3), -1);
+  EXPECT_EQ(compare_x<int>(&p1, &p2), 0);
+  EXPECT_EQ(compare_y<int>(&p1, &p2), 0);
+  EXPECT_EQ(compare_pt<int>(&p1, &p2), 0);
+  EXPECT_EQ(compare_x<int>(&p1, &p3), -1);
+  EXPECT_EQ(compare_y<int>(&p1, &p3), 1);
+  EXPECT_EQ(compare_pt<int>(&p1, &p3), -1);
 }
 
 TEST(PointTest, PointValue) {

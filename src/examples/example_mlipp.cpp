@@ -10,10 +10,11 @@
 
 using namespace std;
 
-vector<Point> seq_range_query(vector<Point> points, 
-    Point min_key, Point max_key)
+template <typename T>
+vector<Point<T>> seq_range_query(vector<Point<T>> points, 
+    Point<T> min_key, Point<T> max_key)
 {
-    vector<Point> result;
+    vector<Point<T>> result;
     for (uint i = 0; i < points.size(); ++i) {
         if (points[i].x >= min_key.x 
             && points[i].x <= max_key.x
@@ -24,23 +25,40 @@ vector<Point> seq_range_query(vector<Point> points,
     return result;
 }
 
-void
-run(int n)
+template <typename T>
+void run(int n)
 {
-    MLIPP_KD<int> mlipp;
+    MLIPP_KD<T> mlipp;
 
     /* Generate random data */
-    vector<Point> data;
-    for (int i = 0; i < n; ++i)
-        data.push_back((Point){rand(), rand()});
+    vector<Point<T>> data;
+    
+    double x1, x2, y1, y2;
+    if (std::is_same<T, double>::value) {
+      for (int i = 0; i < n; ++i) {
+        data.push_back((Point<T>){(double) rand() / RAND_MAX, (double) rand() / RAND_MAX});
+      }
+      x1 = (double) rand() / RAND_MAX;
+      x2 = (double) rand() / RAND_MAX;
+      y1 = (double) rand() / RAND_MAX;
+      y2 = (double) rand() / RAND_MAX;
+  } else if (std::is_same<T, int>::value) {
+      for (int i = 0; i < n; ++i) {
+        data.push_back((Point<T>){rand(), rand()});
+      }
+      x1 = rand();
+      x2 = rand();
+      y1 = rand();
+      y2 = rand();
+    }
 
     /* Generate a random range */
-    int x1 = rand();
-    int x2 = rand();
-    int y1 = rand();
-    int y2 = rand();
-    Point min_point = (Point){min(x1, x2), min(y1, y2)};
-    Point max_point = (Point){max(x1, x2), max(y1, y2)};
+    // double x1 = (double) rand() / RAND_MAX;
+    // double x2 = (double) rand() / RAND_MAX;
+    // double y1 = (double) rand() / RAND_MAX;
+    // double y2 = (double) rand() / RAND_MAX;
+    Point<T> min_point = (Point<T>){min(x1, x2), min(y1, y2)};
+    Point<T> max_point = (Point<T>){max(x1, x2), max(y1, y2)};
 
     auto start_time = chrono::high_resolution_clock::now();
 
@@ -66,8 +84,8 @@ run(int n)
     start_time = chrono::high_resolution_clock::now();
 
     /* Range query */
-    vector<Point> seq_result = seq_range_query(data, min_point, max_point);
-    vector<Point> mlipp_result(seq_result.size());
+    vector<Point<T>> seq_result = seq_range_query(data, min_point, max_point);
+    vector<Point<T>> mlipp_result(seq_result.size());
     int result_size = 0;
 
     result_size = mlipp.range_query(min_point, max_point, mlipp_result.data());
@@ -85,6 +103,7 @@ run(int n)
 int main()
 {
     srand(9);
-    run(5e6);
+    run<int>(5e6);
+    run<double>(5e6);
     return 0;
 }

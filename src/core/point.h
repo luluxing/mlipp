@@ -11,35 +11,51 @@ struct Point {
     return x == other.x && y == other.y;
   }
 
-  static inline int compare_x(const void* a, const void* b) {
-    if (static_cast<const Point*>(a)->x == static_cast<const Point*>(b)->x)
-      return 0;
-    else if (static_cast<const Point*>(a)->x < static_cast<const Point*>(b)->x)
-      return -1;
-    else
-      return 1;
+  bool operator!=(const Point& other) const {
+    return x != other.x || y != other.y;
   }
 
-  static inline int compare_y(const void* a, const void* b) {
-    if (static_cast<const Point*>(a)->y == static_cast<const Point*>(b)->y)
-      return 0;
-    else if (static_cast<const Point*>(a)->y < static_cast<const Point*>(b)->y)
-      return -1;
-    else
-      return 1;
+  bool operator<(const Point& other) const {
+    return x < other.x || (x == other.x && y < other.y);
   }
 
-  static inline int compare_pt(const void* a, const void* b) {
-    int cmp_x = compare_x(a, b);
-    if (cmp_x == 0)
-      return compare_y(a, b);
-    else
-      return cmp_x;
+  bool operator>(const Point& other) const {
+    return x > other.x || (x == other.x && y > other.y);
   }
 };
 
 #define PT_VAL(point, axis) ((axis) == 0 ? (point).x : (point).y)
 #define PT_EQ(p1, p2) ((p1).x == (p2).x && (p1).y == (p2).y)
 
+#define PAIR_VAL(p, axis) (((int*)&p)[axis])
+
+template <class T>
+static inline int compare_x(const void* a, const void* b) {
+  if (static_cast<const Point<T>*>(a)->x == static_cast<const Point<T>*>(b)->x)
+    return 0;
+  else if (static_cast<const Point<T>*>(a)->x < static_cast<const Point<T>*>(b)->x)
+    return -1;
+  else
+    return 1;
+}
+
+template <class T>
+static inline int compare_y(const void* a, const void* b) {
+  if (static_cast<const Point<T>*>(a)->y == static_cast<const Point<T>*>(b)->y)
+    return 0;
+  else if (static_cast<const Point<T>*>(a)->y < static_cast<const Point<T>*>(b)->y)
+    return -1;
+  else
+    return 1;
+}
+
+template <class T>
+static inline int compare_pt(const void* a, const void* b) {
+  int cmp_x = compare_x<T>(a, b);
+  if (cmp_x == 0)
+    return compare_y<T>(a, b);
+  else
+    return cmp_x;
+}
 
 #endif // __POINT_H_
