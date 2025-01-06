@@ -23,9 +23,9 @@ endif()
 include_directories(src/core)
 include_directories(src/morton)
 
-add_executable(example_kdtree src/examples/example_kdtree.cpp)
+# add_executable(example_kdtree src/examples/example_kdtree.cpp)
 # add_executable(example src/examples/example.cpp)
-add_executable(example_zorder src/examples/example_zorder.cpp)
+# add_executable(example_zorder src/examples/example_zorder.cpp)
 add_executable(example_mlipp src/examples/example_mlipp.cpp)
 # add_executable(example_quad src/examples/example_quad.cpp)
 # add_executable(example_without_fmcd src/examples/example_without_fmcd.cpp)
@@ -49,6 +49,15 @@ FetchContent_MakeAvailable(googletest)
 # Enable testing
 enable_testing()
 add_executable(
+  point_test
+  test/test_point.cc
+)
+target_link_libraries(
+  point_test
+  GTest::gtest_main
+)
+
+add_executable(
   mlipp_kd_test
   test/test_mlipp_kd.cc
 )
@@ -59,3 +68,4 @@ target_link_libraries(
 
 include(GoogleTest)
 gtest_discover_tests(mlipp_kd_test)
+gtest_discover_tests(point_test)
