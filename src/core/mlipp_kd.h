@@ -52,6 +52,14 @@ class MLIPP_KD
 
 public:
 
+#ifdef BREAKDOWN
+  uint64_t nodes_contain_result = 0;
+  uint64_t total_checked_nodes = 0;
+  double innernode_search_time = 0.0;
+  double leafnode_search_time = 0.0;
+  uint32_t max_depth = 0;
+#endif
+
   MLIPP_KD(double BUILD_LR_REMAIN = 0, bool QUIET = true)
     : BUILD_LR_REMAIN(BUILD_LR_REMAIN), QUIET(QUIET) {
     /*{
@@ -940,6 +948,9 @@ private:
       int recheck_case[2] = {*s.top().recheck_case};
       s.pop();
 
+#ifdef BREAKDOWN
+      total_checked_nodes++;
+#endif
       int axis = node->level % 2;
       int ayis = (node->level + 1) % 2;
 
@@ -958,8 +969,12 @@ private:
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                    && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                    && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
-                   && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                   && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                     result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -986,8 +1001,12 @@ private:
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                    && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
-                   && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                   && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)) {
                     result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                   }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1014,8 +1033,12 @@ private:
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
-                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1041,8 +1064,12 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
-                 && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis)))
+                 && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                  nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1068,8 +1095,12 @@ private:
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
-                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                  nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1090,8 +1121,12 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
-                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1112,8 +1147,12 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
-                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                  nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1133,8 +1172,12 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
-                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis)))
+                if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))) {
                   result.push_back(node->items[i].comp.data);
+  #ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1156,8 +1199,12 @@ private:
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
-                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1178,8 +1225,12 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
-                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1200,8 +1251,12 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
-                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                 }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1221,8 +1276,12 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
-                if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis)))
+                if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                }
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1242,8 +1301,12 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
-                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                 && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                 }
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
@@ -1256,8 +1319,12 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
-                if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
+                if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                    nodes_contain_result++;
+#endif
+                }
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
@@ -1270,8 +1337,12 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
-                if (PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
+                if (PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis)) {
                   result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                  nodes_contain_result++;
+#endif
+                }
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
@@ -1285,6 +1356,9 @@ private:
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 result.push_back(node->items[i].comp.data);
+#ifdef BREAKDOWN
+                nodes_contain_result++;
+#endif
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
