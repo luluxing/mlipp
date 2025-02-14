@@ -17,6 +17,8 @@
 
 using namespace libmorton;
 
+uint32_t precision = 4294967295; // 2^32 - 1
+// uint32_t precision = 8388607; // 2^23 - 1
 
 
 template<class T, bool USE_FMCD = true>
@@ -34,8 +36,8 @@ class MLIPP_Z
     // If T is double, need to transform it to int first.
     if constexpr (std::is_same<T, double>::value) {
       return morton2D_64_encode(
-        static_cast<uint32_t>(key.x * (8388607)),
-        static_cast<uint32_t>(key.y * (8388607)));
+        static_cast<uint32_t>(key.x * precision),
+        static_cast<uint32_t>(key.y * precision));
     }
     return morton2D_64_encode(key.x, key.y);
   }
