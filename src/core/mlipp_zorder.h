@@ -17,6 +17,8 @@
 
 using namespace libmorton;
 
+
+
 template<class T, bool USE_FMCD = true>
 class MLIPP_Z
 {
@@ -28,15 +30,21 @@ class MLIPP_Z
         return 5;
     }
 
-    inline Z encode(const Point& key) const {
+    inline Z encode(const Point<T>& key) const {
+        // If T is double, need to transform it to int first.
+        if constexpr (std::is_same<T, double>::value) {
+            return morton2D_64_encode(
+                static_cast<uint32_t>(key.x * (8388607)),
+                static_cast<uint32_t>(key.y * (8388607)));
+        }
         return morton2D_64_encode(key.x, key.y);
     }
 
-    inline Point decode(const Z& zkey) const {
+    inline Point<T> decode(const Z& zkey) const {
         uint_fast32_t x_uint;
         uint_fast32_t y_uint;
         morton2D_64_decode(zkey, x_uint, y_uint);
-        Point key;
+        Point<T> key;
         key.x = static_cast<int>(x_uint);
         key.y = static_cast<int>(y_uint);
         return key;
@@ -95,10 +103,10 @@ public:
         destory_pending();
     }
 
-    void insert(const Point& key) {
+    void insert(const Point<T>& key) {
         root = insert_tree(root, key);
     }
-    bool exists(const Point& key) {
+    bool exists(const Point<T>& key) {
         const Z zkey = encode(key);
         Node* node = root;
         while (true) {
@@ -112,19 +120,19 @@ public:
             }
         }
     }
-    void rangeQuery(const Point& min_key, const Point& max_key, std::vector<Point> &result) {
+    void rangeQuery(const Point<T>& min_key, const Point<T>& max_key, std::vector<Point<T>> &result) {
         const Z min_zkey = encode(min_key);
         const Z max_zkey = encode(max_key);
         rangeQueryInternal(root, min_key, max_key, min_zkey, max_zkey, result);
         return;
     }
     // Find the keys which are in range [lower, upper], returns the number of found keys.
-    int range_query(const Point& lower, const Point& upper, Point* results) const {
+    int range_query(const Point<T>& lower, const Point<T>& upper, Point<T>* results) const {
         const Z zlower = encode(lower);
         const Z zupper = encode(upper);
         return range_core<false, false>(results, 0, root, lower, upper, zlower, zupper);
     }
-    void bulk_load(Point* vs, int num_keys) {
+    void bulk_load(Point<T>* vs, int num_keys) {
         if (num_keys == 0) {
             destroy_tree(root);
             root = build_tree_none();
@@ -269,7 +277,7 @@ private:
     struct Item
     {
         union {
-            Point data;
+            Point<T> data;
             Node* child;
         } comp;
     };
@@ -329,8 +337,8 @@ private:
     // SATISFY_LOWER = true means all the keys in the subtree of `node` are no less than to `lower`.
     // SATISFY_UPPER = true means all the keys in the subtree of `node` are no greater than to `upper`.
     template<bool SATISFY_LOWER, bool SATISFY_UPPER>
-    int range_core(Point* results, int pos, Node* node, 
-        const Point& lower, const Point& upper,
+    int range_core(Point<T>* results, int pos, Node* node, 
+        const Point<T>& lower, const Point<T>& upper,
         const Z zlower, const Z zupper) const
     {
         if constexpr (SATISFY_LOWER && SATISFY_UPPER) {
@@ -451,9 +459,9 @@ private:
     }
 
     void rangeQueryInternal(Node* root,
-        const Point& min_key, const Point& max_key,
+        const Point<T>& min_key, const Point<T>& max_key,
         const Z& min_zkey, const Z& max_zkey,
-        std::vector<Point> &result) {
+        std::vector<Point<T>> &result) {
         
         int min_pos = PREDICT_POS(root, min_zkey);
         int max_pos = PREDICT_POS(root, max_zkey);
@@ -497,7 +505,7 @@ private:
         return node;
     }
     /// build a tree with two keys
-    Node* build_tree_two(Point key1, Z zkey1, Point key2, Z zkey2)
+    Node* build_tree_two(Point<T> key1, Z zkey1, Point<T> key2, Z zkey2)
     {
         if (zkey1 > zkey2) {
             std::swap(key1, key2);
@@ -552,7 +560,7 @@ private:
         return node;
     }
     /// bulk build, _keys must be sorted in asc order.
-    Node* build_tree_bulk(Point* _keys, int _size, bool sorted)
+    Node* build_tree_bulk(Point<T>* _keys, int _size, bool sorted)
     {
         if (USE_FMCD) {
             return build_tree_bulk_fmcd(_keys, _size, sorted);
@@ -562,17 +570,17 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// split keys into three parts at each node.
-    Node* build_tree_bulk_fast(Point* _keys, int _size, bool sorted)
+    Node* build_tree_bulk_fast(Point<T>* _keys, int _size, bool sorted)
     {
         Z* _zkeys = new Z[_size];
         for (int i = 0; i < _size; ++i)
             _zkeys[i] = encode(_keys[i]);
         if (!sorted)
         {
-            std::pair<Z, Point>* pairs = new std::pair<Z, Point>[_size];
+            std::pair<Z, Point<T>>* pairs = new std::pair<Z, Point<T>>[_size];
             for (int i = 0; i < _size; ++i )
               pairs[i] = std::make_pair(_zkeys[i], _keys[i]);
-            std::sort(pairs, pairs + _size, [](std::pair<Z, Point> &left, std::pair<Z, Point> &right) {
+            std::sort(pairs, pairs + _size, [](std::pair<Z, Point<T>> &left, std::pair<Z, Point<T>> &right) {
                 return left.first < right.first;
             });
             for (int i = 0; i < _size; ++i )
@@ -609,7 +617,7 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                Point* keys = _keys + begin;
+                Point<T>* keys = _keys + begin;
                 Z* zkeys = _zkeys + begin;
                 const int size = end - begin;
                 const int BUILD_GAP_CNT = compute_gap_count(size);
@@ -692,17 +700,17 @@ private:
     }
     /// bulk build, _keys must be sorted in asc order.
     /// FMCD method.
-    Node* build_tree_bulk_fmcd(Point* _keys, int _size, bool sorted)
+    Node* build_tree_bulk_fmcd(Point<T>* _keys, int _size, bool sorted)
     {
         Z* _zkeys = new Z[_size];
         for (int i = 0; i < _size; ++i)
             _zkeys[i] = encode(_keys[i]);
         if (!sorted)
         {
-            std::pair<Z, Point>* pairs = new std::pair<Z, Point>[_size];
+            std::pair<Z, Point<T>>* pairs = new std::pair<Z, Point<T>>[_size];
             for (int i = 0; i < _size; ++i )
                 pairs[i] = std::make_pair(_zkeys[i], _keys[i]);
-            std::sort(pairs, pairs + _size, [](std::pair<Z, Point> &left, std::pair<Z, Point> &right) {
+            std::sort(pairs, pairs + _size, [](std::pair<Z, Point<T>> &left, std::pair<Z, Point<T>> &right) {
                 return left.first < right.first;
             });
             for (int i = 0; i < _size; ++i )
@@ -739,7 +747,7 @@ private:
                 memcpy(node, _, sizeof(Node));
                 delete_nodes(_, 1);
             } else {
-                Point* keys = _keys + begin;
+                Point<T>* keys = _keys + begin;
                 Z* zkeys = _zkeys + begin;
                 const int size = end - begin;
                 const int BUILD_GAP_CNT = compute_gap_count(size);
@@ -905,7 +913,7 @@ private:
         }
     }
 
-    void scan_and_destory_tree(Node* _root, Point* keys, bool destory = true)
+    void scan_and_destory_tree(Node* _root, Point<T>* keys, bool destory = true)
     {
         typedef std::pair<int, Node*> Segment; // <begin, Node*>
         std::stack<Segment> s;
@@ -952,7 +960,7 @@ private:
         }
     }
 
-    Node* insert_tree(Node* _node, const Point& key)
+    Node* insert_tree(Node* _node, const Point<T>& key)
     {
         const Z zkey = encode(key);
         constexpr int MAX_DEPTH = 128;
@@ -992,7 +1000,7 @@ private:
 
             if (need_rebuild) {
                 const int ESIZE = node->size;
-                Point* keys = new Point[ESIZE];
+                Point<T>* keys = new Point<T>[ESIZE];
 
                 scan_and_destory_tree(node, keys);
                 Node* new_node = build_tree_bulk(keys, ESIZE, true);

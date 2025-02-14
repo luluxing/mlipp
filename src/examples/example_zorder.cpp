@@ -8,10 +8,10 @@
 
 using namespace std;
 
-vector<Point> seq_range_query(vector<Point> points, 
-    Point min_key, Point max_key)
+vector<Point<int>> seq_range_query(vector<Point<int>> points, 
+    Point<int> min_key, Point<int> max_key)
 {
-    vector<Point> result;
+    vector<Point<int>> result;
     for (uint i = 0; i < points.size(); ++i) {
         if (points[i].x >= min_key.x 
             && points[i].x <= max_key.x
@@ -28,17 +28,17 @@ run(int n)
     MLIPP_Z<int> mlipp;
 
     /* Generate random data */
-    vector<Point> data;
+    vector<Point<int>> data;
     for (int i = 0; i < n; ++i)
-        data.push_back((Point){rand(), rand()});
+        data.push_back((Point<int>){rand(), rand()});
 
     /* Generate a random range */
     int x1 = rand();
     int x2 = rand();
     int y1 = rand();
     int y2 = rand();
-    Point min_point = (Point){min(x1, x2), min(y1, y2)};
-    Point max_point = (Point){max(x1, x2), max(y1, y2)};
+    Point<int> min_point = (Point<int>){min(x1, x2), min(y1, y2)};
+    Point<int> max_point = (Point<int>){max(x1, x2), max(y1, y2)};
 
     auto start_time = chrono::high_resolution_clock::now();
 
@@ -64,8 +64,8 @@ run(int n)
     start_time = chrono::high_resolution_clock::now();
 
     /* Range query */
-    vector<Point> seq_result = seq_range_query(data, min_point, max_point);
-    vector<Point> mlipp_result(seq_result.size());
+    vector<Point<int>> seq_result = seq_range_query(data, min_point, max_point);
+    vector<Point<int>> mlipp_result(seq_result.size());
     int result_size = 0;
 
     result_size = mlipp.range_query(min_point, max_point, mlipp_result.data());
