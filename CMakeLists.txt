@@ -75,7 +75,17 @@ target_link_libraries(
   GTest::gtest_main
 )
 
+add_executable(
+  test_lippxy
+  test/test_lippxy.cc
+)
+target_link_libraries(
+  test_lippxy
+  GTest::gtest_main
+)
+
 include(GoogleTest)
 gtest_discover_tests(mlipp_kd_test)
 gtest_discover_tests(point_test)
 gtest_discover_tests(test_mlipp_z)
+gtest_discover_tests(test_lippxy)
