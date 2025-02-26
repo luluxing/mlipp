@@ -461,7 +461,7 @@ private:
             if (BITMAP_GET(root->none_bitmap, i) == 0) {
                 if (BITMAP_GET(root->child_bitmap, i) == 0) {
                     if (!((i == min_pos && root->items[i].comp.data.key < min_key) 
-                        || (i == max_pos && root->items[i].comp.data.key > min_key)))
+                        || (i == max_pos && root->items[i].comp.data.key > max_key)))
                         result.push_back(std::make_pair(
                             root->items[i].comp.data.key, 
                             root->items[i].comp.data.value));
