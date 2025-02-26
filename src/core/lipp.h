@@ -64,17 +64,17 @@ public:
     LIPP(double BUILD_LR_REMAIN = 0, bool QUIET = true)
         : BUILD_LR_REMAIN(BUILD_LR_REMAIN), QUIET(QUIET) {
         {
-            std::vector<Node*> nodes;
-            for (int _ = 0; _ < 1e7; _ ++) {
-                Node* node = build_tree_two(T(0), P(), T(1), P());
-                nodes.push_back(node);
-            }
-            for (auto node : nodes) {
-                destroy_tree(node);
-            }
-            if (!QUIET) {
-                printf("initial memory pool size = %lu\n", pending_two.size());
-            }
+            // std::vector<Node*> nodes;
+            // for (int _ = 0; _ < 1e7; _ ++) {
+            //     Node* node = build_tree_two(T(0), P(), T(1), P());
+            //     nodes.push_back(node);
+            // }
+            // for (auto node : nodes) {
+            //     destroy_tree(node);
+            // }
+            // if (!QUIET) {
+            //     printf("initial memory pool size = %lu\n", pending_two.size());
+            // }
         }
         if (USE_FMCD && !QUIET) {
             printf("enable FMCD\n");
