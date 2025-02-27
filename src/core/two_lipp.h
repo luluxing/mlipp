@@ -155,6 +155,13 @@ class LIPP_XY {
     return false;
   }
 
+  size_t index_size() const {
+    auto s = lipp_x.index_size(true, false) + lipp_y.index_size(true, false);
+    s += pts_sort_x.size() * sizeof(Point<T>);
+    s += pts_sort_y.size() * sizeof(Point<T>);
+    return s;
+  }
+
  private:
   LIPP<T, uint64_t, USE_FMCD> lipp_x;
   LIPP<T, uint64_t, USE_FMCD> lipp_y;
