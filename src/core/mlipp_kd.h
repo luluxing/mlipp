@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <stack>
 #include <vector>
+#include <queue>
 #include <cstring>
 #include <sstream>
 
@@ -140,36 +141,56 @@ public:
     root = build_tree_bulk(vs, num_keys, 0);
   }
 
-  /*void show() const {
-    printf("============= SHOW MLIPP_KD ================\n");
-
-    std::stack<Node*> s;
+  void show() const {
+    fprintf(stdout, "Max depth: %d\n", max_depth());
+    std::queue<Node*> s;
     s.push(root);
     while (!s.empty()) {
-      Node* node = s.top(); s.pop();
+      // Node* node = s.top();
+      Node* node = s.front();
+      s.pop();
 
-      printf("Node(%p, a = %lf, b = %llf, num_items = %d)", node, node->model.a, node->model.b, node->num_items);
-      printf("[");
+      // printf("Node(%p, a = %lf, b = %llf, num_items = %d)", node, node->model.a, node->model.b, node->num_items);
+      // printf("[");
       int first = 1;
       for (int i = 0; i < node->num_items; i ++) {
-        if (!first) {
-          printf(", ");
-        }
+        // if (!first) {
+        //   printf(", ");
+        // }
         first = 0;
         if (BITMAP_GET(node->none_bitmap, i) == 1) {
-          printf("None");
+          // printf("None");
         } else if (BITMAP_GET(node->child_bitmap, i) == 0) {
           std::stringstream s;
-          s << node->items[i].comp.data.key;
-          printf("Key(%s)", s.str().c_str());
+          s << node->items[i].comp.data;
+          printf("%s ", s.str().c_str());
         } else {
-          printf("Child(%p)", node->items[i].comp.child);
+          // printf("Child(%p)", node->items[i].comp.child);
           s.push(node->items[i].comp.child);
         }
       }
-      printf("]\n");
+      printf("\n");
     }
-  }*/
+  }
+  int max_depth() const {
+    int max_depth = 0;
+    std::stack<Node*> s;
+    std::stack<int> d;
+    s.push(root);
+    d.push(1);
+    while (!s.empty()) {
+      Node* node = s.top(); s.pop();
+      int depth = d.top(); d.pop();
+      max_depth = std::max(max_depth, depth);
+      for (int i = 0; i < node->num_items; i ++) {
+        if (BITMAP_GET(node->child_bitmap, i) == 1) {
+          s.push(node->items[i].comp.child);
+          d.push(depth + 1);
+        }
+      }
+    }
+    return max_depth;
+  }
   void print_depth(int *max_depth_ret, double *avg_depth) const {
     std::stack<Node*> s;
     std::stack<int> d;

@@ -22,6 +22,12 @@ struct Point {
   bool operator>(const Point& other) const {
     return x > other.x || (x == other.x && y > other.y);
   }
+
+  // Implement an operator to append a point to a stream
+  friend std::ostream& operator<<(std::ostream& os, const Point& point) {
+    os << "(" << point.x << "," << point.y << ")";
+    return os;
+  }
 };
 
 #define PT_VAL(point, axis) ((axis) == 0 ? (point).x : (point).y)
