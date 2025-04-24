@@ -30,36 +30,55 @@ class MultiMlipp {
   void bulk_load(Point<T>* vs, int num_keys) {
     // Partition the data or space based on the partition type
     if (base_ == Partition::DATA) {
-      std::vector<double> delimiters;
+      std::vector<T> delimiters;
       // Sort the data given the axis into partitions
       if (part_axis_ == Axis::X_AXIS) {
         // Sort by X-axis
         std::sort(vs, vs + num_keys, [](const Point<T>& a, const Point<T>& b) {
           return a.x < b.x;
         });
+        int remaining = num_keys;
+        int num_keys_per_partition = num_keys / partition_;
         for (int i = 0 ; i < partition_; ++i) {
-          delimiters.push_back(vs[i * num_keys / partition_].x);
+          delimiters.push_back(vs[i * num_keys_per_partition].x);
           mlipp_map_[delimiters.back()] = new MLIPP_KD<T, USE_FMCD>(0.0, true);
-          mlipp_map_[delimiters.back()]->bulk_load(vs + i * num_keys / partition_,
-                                                   num_keys / partition_);
+          if (i == partition_ - 1) {
+            // Last partition may contain remaining elements
+            mlipp_map_[delimiters.back()]->bulk_load(vs + i * num_keys_per_partition,
+                                                     remaining);
+          } else {
+            mlipp_map_[delimiters.back()]->bulk_load(vs + i * num_keys_per_partition,
+                                                     num_keys_per_partition);
+          }
+          remaining -= num_keys_per_partition;
         }
       } else {
         // Sort by Y-axis
         std::sort(vs, vs + num_keys, [](const Point<T>& a, const Point<T>& b) {
           return a.y < b.y;
         });
+        int remaining = num_keys;
+        int num_keys_per_partition = num_keys / partition_;
         for (int i = 0 ; i < partition_; ++i) {
-          delimiters.push_back(vs[i * num_keys / partition_].y);
+          delimiters.push_back(vs[i * num_keys_per_partition].y);
+          // print delimiter
           mlipp_map_[delimiters.back()] = new MLIPP_KD<T, USE_FMCD>(0.0, true);
-          mlipp_map_[delimiters.back()]->bulk_load(vs + i * num_keys / partition_,
-                                                   num_keys / partition_);
+          if (i == partition_ - 1) {
+            // Last partition may contain remaining elements
+            mlipp_map_[delimiters.back()]->bulk_load(vs + i * num_keys_per_partition,
+                                                     remaining);
+          } else {
+            mlipp_map_[delimiters.back()]->bulk_load(vs + i * num_keys_per_partition,
+                                                     num_keys_per_partition);
+          }
+          remaining -= num_keys_per_partition;
         }
       }
     } else {
       assert(base_ == Partition::SPACE);
       // Obtain the minimum and maximum values for the axis of the given points
       T min_val = std::numeric_limits<T>::max();
-      T max_val = std::numeric_limits<T>::lowest();
+      T max_val = std::numeric_limits<T>::min();
       for (int i = 0; i < num_keys; ++i) {
         if (part_axis_ == Axis::X_AXIS) {
           min_val = std::min(min_val, vs[i].x);
@@ -73,7 +92,7 @@ class MultiMlipp {
       T step = (max_val - min_val) / partition_;
       for (int i = 0; i < partition_; ++i) {
         T lower_bound = min_val + i * step;
-        T upper_bound = (i == partition_ - 1) ? max_val : min_val + (i + 1) * step;
+        T upper_bound = (i == partition_ - 1) ? std::numeric_limits<T>::max() : min_val + (i + 1) * step;
         mlipp_map_[lower_bound] = new MLIPP_KD<T, USE_FMCD>(0.0, true);
         std::vector<Point<T>> partition_points;
         for (int j = 0; j < num_keys; ++j) {
@@ -97,7 +116,19 @@ class MultiMlipp {
 
   void insert(const Point<T>& key) {}
 
-  bool exists(const Point<T>& key) {}
+  bool exists(const Point<T>& key) {
+    double target_pt = part_axis_ == Axis::X_AXIS ? key.x : key.y;
+    // Iterate over the leaf and find the partition that contains the key
+    auto it = mlipp_map_.lower_bound(target_pt);
+    if (it != mlipp_map_.end() && it->first == target_pt) {
+      return it->second->exists(key);
+    }
+    if (it != mlipp_map_.begin()) {
+      --it; // Move to the previous partition if the exact key is not found
+      return it->second->exists(key);
+    }
+    return false; // Key not found in any partition
+  }
 
   size_t index_size() const {}
 
