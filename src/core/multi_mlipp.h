@@ -108,16 +108,44 @@ class MultiMlipp {
 
   int knn_query(const Point<T>& key, int k, Point<T>* results, double* distances) {}
 
-  int range_query(const Point<T>& lower, const Point<T>& upper, Point<T>* results) const {}
+  int range_query(const Point<T>& lower, const Point<T>& upper, Point<T>* results) const {
+    std::vector<Point<T>> temp_results;
+    rangeQuery(lower, upper, temp_results);
+    // Copy results to the output array
+    int count = 0;
+    for (const auto& pt : temp_results) {
+      results[count++] = pt;
+    }
+    return count;
+  }
 
   void rangeQuery(const Point<T>& min_key,
-    const Point<T>& max_key,
-    std::vector<Point<T>>& result) {}
+                  const Point<T>& max_key,
+                  std::vector<Point<T>>& result) {
+    // Break the range query into multiple partition queries and merge results
+    T min_val = part_axis_ == Axis::X_AXIS ? min_key.x : min_key.y;
+    T max_val = part_axis_ == Axis::X_AXIS ? max_key.x : max_key.y;
+    auto it_low = mlipp_map_.lower_bound(min_val);
+    if (it_low != mlipp_map_.end() && it_low->first == min_val) {
+      // Do nothing
+    } else {
+      if (it_low != mlipp_map_.begin()) {
+        --it_low; // Move to the previous partition if the exact key is not found
+      }
+    }
+    auto it_up = mlipp_map_.upper_bound(max_val);
+    for (auto it = it_low; it != it_up; ++it) {
+      // Query each partition
+      std::vector<Point<T>> partition_results;
+      it->second->rangeQuery(min_key, max_key, partition_results);
+      result.insert(result.end(), partition_results.begin(), partition_results.end());
+    }
+  }
 
   void insert(const Point<T>& key) {}
 
   bool exists(const Point<T>& key) {
-    double target_pt = part_axis_ == Axis::X_AXIS ? key.x : key.y;
+    T target_pt = part_axis_ == Axis::X_AXIS ? key.x : key.y;
     // Iterate over the leaf and find the partition that contains the key
     auto it = mlipp_map_.lower_bound(target_pt);
     if (it != mlipp_map_.end() && it->first == target_pt) {
