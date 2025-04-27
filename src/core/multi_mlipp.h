@@ -158,7 +158,13 @@ class MultiMlipp {
     return false; // Key not found in any partition
   }
 
-  size_t index_size() const {}
+  size_t index_size() const {
+    size_t total_size = 0;
+    for (const auto& pair : mlipp_map_) {
+      total_size += pair.second->index_size();
+    }
+    return total_size;
+  }
 
  private:
   int partition_;
