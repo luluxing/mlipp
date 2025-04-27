@@ -24,6 +24,7 @@ class MultiMlipp {
       fprintf(stderr, "Partition out of bound.\n");
       exit(EXIT_FAILURE);
     }
+    fprintf(stdout, "Partition: %d\n", partition_);
   }
   ~MultiMlipp() {}
 
