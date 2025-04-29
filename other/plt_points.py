@@ -22,6 +22,9 @@ def main():
     lines = f.readlines()
     colors_idx = 0
     for line in lines:
+      # if the line does not start with '(' or is empty, skip it
+      if not line.strip() or not line.startswith('('):
+        continue
       points = line.rstrip().split(' ')
       points_list = []
       maxx = maxy = -1

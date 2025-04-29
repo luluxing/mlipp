@@ -35,6 +35,7 @@ add_executable(example_mlipp src/examples/example_mlipp.cpp)
 # add_executable(point_benchmark src/benchmarks/point_benchmark.cpp)
 # add_executable(range_benchmark src/benchmarks/range_benchmark.cpp)
 # add_executable(range_benchmark_1d src/benchmarks/range_benchmark_1d.cpp)
+add_executable(plot_mlipp src/benchmarks/plot_mlipp.cpp)
 
 include(FetchContent)
 FetchContent_Declare(

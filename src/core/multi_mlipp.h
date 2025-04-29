@@ -1,6 +1,7 @@
 #ifndef MULTI_MLIPP_H
 #define MULTI_MLIPP_H
 
+#include <cassert>
 #include <map>
 #include <vector>
 #include "mlipp_kd.h"
@@ -27,6 +28,12 @@ class MultiMlipp {
     fprintf(stdout, "Partition: %d\n", partition_);
   }
   ~MultiMlipp() {}
+
+  void show() {
+    for (const auto& pair : mlipp_map_) {
+      pair.second->show();
+    }
+  }
 
   void bulk_load(Point<T>* vs, int num_keys) {
     // Partition the data or space based on the partition type

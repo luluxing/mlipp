@@ -161,9 +161,9 @@ public:
         if (BITMAP_GET(node->none_bitmap, i) == 1) {
           // printf("None");
         } else if (BITMAP_GET(node->child_bitmap, i) == 0) {
-          std::stringstream s;
-          s << node->items[i].comp.data;
-          printf("%s ", s.str().c_str());
+          std::stringstream ss;
+          ss << node->items[i].comp.data;
+          printf("%s ", ss.str().c_str());
         } else {
           // printf("Child(%p)", node->items[i].comp.child);
           s.push(node->items[i].comp.child);
