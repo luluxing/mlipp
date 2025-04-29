@@ -84,8 +84,18 @@ target_link_libraries(
   GTest::gtest_main
 )
 
+add_executable(
+  test_multi_mlipp
+  test/test_multi_mlipp.cc
+)
+target_link_libraries(
+  test_multi_mlipp
+  GTest::gtest_main
+)
+
 include(GoogleTest)
 gtest_discover_tests(mlipp_kd_test)
 gtest_discover_tests(point_test)
 gtest_discover_tests(test_mlipp_z)
 gtest_discover_tests(test_lippxy)
+gtest_discover_tests(test_multi_mlipp)
