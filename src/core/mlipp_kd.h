@@ -1,6 +1,7 @@
 #ifndef __MLIPP_KD_H__
 #define __MLIPP_KD_H__
 
+#include <chrono>
 #include <stdint.h>
 #include <math.h>
 #include <cfloat>
@@ -273,6 +274,30 @@ public:
     }
     return size;
   }
+
+ struct RangeStat {
+  int predict_time = 0;
+  int num_null = 0.0;
+  double add_to_res_time = 0.0;
+  int num_visited_nodes = 0;
+ } range_stats;
+
+  void reset_range_stat() {
+    range_stats.predict_time = 0;
+    range_stats.num_null = 0;
+    range_stats.go_to_child_time = 0.0;
+    range_stats.num_visited_nodes = 0;
+  }
+
+  void print_range_stat() const {
+    printf("======== Range Stats ===========\n");
+    printf("\t predict_time = %d\n", range_stats.predict_time);
+    printf("\t num_null = %d\n", range_stats.num_null);
+    printf("\t add_to_res_time = %.2lf\n", range_stats.add_to_res_time);
+    printf("\t num_visited_nodes = %d\n", range_stats.num_visited_nodes);
+  }
+
+
 
 private:
   struct Node;
@@ -960,27 +985,40 @@ private:
       Node* node = s.top().node;
       int recheck_case[2] = {*s.top().recheck_case};
       s.pop();
+      range_stats.num_visited_nodes++;
 
       int axis = node->level % 2;
       int ayis = (node->level + 1) % 2;
 
       int min_pos = 0;
       int max_pos = node->num_items - 1;
+      // Define start, end, and elapsed for time measurement
+      auto start = std::chrono::high_resolution_clock::now();
+      auto end = std::chrono::high_resolution_clock::now();
+      auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
       switch (4*recheck_case[axis] + recheck_case[ayis]) {
         case 0:
           // axis: recheck min and max
           // ayis: recheck min and max
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                    && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                    && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
                    && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                     result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -994,21 +1032,32 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 1:
           // axis: recheck min and max
           // ayis: recheck min
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                    && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                    && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
                     result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1022,21 +1071,32 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 2:
           // axis: recheck min and max
           // ayis: recheck max
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1050,20 +1110,31 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 3:
           // axis: recheck min and max
           // ayis: no recheck
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && (i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis)))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1078,19 +1149,30 @@ private:
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
             }
+            else {
+              range_stats.num_null++;
+            }
           }
           break;
         case 4:
           // axis: recheck min
           // ayis: recheck min and max
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1100,19 +1182,30 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 5:
           // axis: recheck min
           // ayis: recheck min
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1122,19 +1215,30 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 6:
           // axis: recheck min
           // ayis: recheck max
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1144,18 +1248,29 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 7:
           // axis: recheck min
           // ayis: no recheck
+          start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i > min_pos || PT_VAL(node->items[i].comp.data, axis) >= PT_VAL(min_key, axis)))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1166,19 +1281,30 @@ private:
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
             }
+            else {
+              range_stats.num_null++;
+            }
           }
           break;
         case 8:
           // axis: recheck max
           // ayis: recheck min and max
+          start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1188,19 +1314,29 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 9:
           // axis: recheck max
           // ayis: recheck min
+          start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1210,19 +1346,30 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
         case 10:
           // axis: recheck max
           // ayis: recheck max
+          start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis))
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1233,17 +1380,28 @@ private:
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
             }
+            else {
+              range_stats.num_null++;
+            }
           }
           break;
         case 11:
           // axis: recheck max
           // ayis: no recheck
+          start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
+          end = std::chrono::high_resolution_clock::now();
+          elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+          range_stats.predict_time += elapsed.count();
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if ((i < max_pos || PT_VAL(node->items[i].comp.data, axis) <= PT_VAL(max_key, axis)))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = end - start;
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 int new_recheck_case[2] = { 0 };
                 new_recheck_case[ayis] = recheck_case[ayis];
@@ -1253,6 +1411,9 @@ private:
                   new_recheck_case[axis] = 3;
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
@@ -1262,12 +1423,19 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis)
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
@@ -1277,11 +1445,18 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
@@ -1291,11 +1466,18 @@ private:
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
+                start = std::chrono::high_resolution_clock::now();
                 if (PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
+                end = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+                range_stats.add_to_res_time += elapsed.count();
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
@@ -1309,6 +1491,9 @@ private:
               } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
               }
+            }
+            else {
+              range_stats.num_null++;
             }
           }
           break;
