@@ -74,6 +74,7 @@ public:
     }*/
 
     root = build_tree_none();
+    reset_range_stat();
   }
   ~MLIPP_KD() {
     destroy_tree(root);
@@ -280,13 +281,20 @@ public:
   int num_null = 0.0;
   double add_to_res_time = 0.0;
   int num_visited_nodes = 0;
+  std::map<int, int> node_count;
+  std::map<int, int> case_id;
+  int empty_visit_one_dim_out = 0;
+  int empty_visit_two_dim_out = 0;
+  int empty_visit_avg_node_size = 0;
  } range_stats;
 
   void reset_range_stat() {
     range_stats.predict_time = 0;
     range_stats.num_null = 0;
-    range_stats.go_to_child_time = 0.0;
     range_stats.num_visited_nodes = 0;
+    for (int i  = 0; i < 16; i++) {
+      range_stats.case_id[i] = 0;
+    }
   }
 
   void print_range_stat() const {
@@ -295,6 +303,16 @@ public:
     printf("\t num_null = %d\n", range_stats.num_null);
     printf("\t add_to_res_time = %.2lf\n", range_stats.add_to_res_time);
     printf("\t num_visited_nodes = %d\n", range_stats.num_visited_nodes);
+    for (const auto& it : range_stats.node_count) {
+      printf("\t %d nodes contain %d queried results\n", it.second, it.first);
+    }
+    for (const auto& it : range_stats.case_id) {
+      printf("\t %d nodes are case %d\n", it.second, it.first);
+    }
+    printf("\t empty_visit_avg_node_size = %f\n", 
+      (double) range_stats.empty_visit_avg_node_size / range_stats.node_count.at(0));
+    printf("\t empty_visit_one_dim_out = %d\n", range_stats.empty_visit_one_dim_out);
+    printf("\t empty_visit_two_dim_out = %d\n", range_stats.empty_visit_two_dim_out);
   }
 
 
@@ -997,10 +1015,13 @@ private:
       auto end = std::chrono::high_resolution_clock::now();
       auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
+      int before_adding = result.size();
+
       switch (4*recheck_case[axis] + recheck_case[ayis]) {
         case 0:
           // axis: recheck min and max
           // ayis: recheck min and max
+          range_stats.case_id[0]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
@@ -1041,6 +1062,7 @@ private:
         case 1:
           // axis: recheck min and max
           // ayis: recheck min
+          range_stats.case_id[1]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
@@ -1080,6 +1102,7 @@ private:
         case 2:
           // axis: recheck min and max
           // ayis: recheck max
+          range_stats.case_id[2]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
@@ -1119,9 +1142,14 @@ private:
         case 3:
           // axis: recheck min and max
           // ayis: no recheck
+          range_stats.case_id[3]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           max_pos = PREDICT_POS(node, max_key);
+          printf("Total: %d,min_pos: %d,max_pos: %d.Level: %d ", node->num_items, min_pos, max_pos, node->level);
+          printf("(%f, %f), (%f, %f);", node->items[0].comp.data.x, node->items[0].comp.data.y,
+                 node->items[node->num_items - 1].comp.data.x, node->items[node->num_items - 1].comp.data.y);
+          printf("min_key: [%f, %f], max_key: [%f, %f]\n", min_key.x, min_key.y, max_key.x, max_key.y);
           end = std::chrono::high_resolution_clock::now();
           elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
           range_stats.predict_time += elapsed.count();
@@ -1157,6 +1185,7 @@ private:
         case 4:
           // axis: recheck min
           // ayis: recheck min and max
+          range_stats.case_id[4]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1191,6 +1220,7 @@ private:
         case 5:
           // axis: recheck min
           // ayis: recheck min
+          range_stats.case_id[5]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1224,6 +1254,7 @@ private:
         case 6:
           // axis: recheck min
           // ayis: recheck max
+          range_stats.case_id[6]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1257,6 +1288,7 @@ private:
         case 7:
           // axis: recheck min
           // ayis: no recheck
+          range_stats.case_id[7]++;
           start = std::chrono::high_resolution_clock::now();
           min_pos = PREDICT_POS(node, min_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1289,6 +1321,7 @@ private:
         case 8:
           // axis: recheck max
           // ayis: recheck min and max
+          range_stats.case_id[8]++;
           start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1323,6 +1356,7 @@ private:
         case 9:
           // axis: recheck max
           // ayis: recheck min
+          range_stats.case_id[9]++;
           start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1355,6 +1389,7 @@ private:
         case 10:
           // axis: recheck max
           // ayis: recheck max
+          range_stats.case_id[10]++;
           start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1388,6 +1423,7 @@ private:
         case 11:
           // axis: recheck max
           // ayis: no recheck
+          range_stats.case_id[11]++;
           start = std::chrono::high_resolution_clock::now();
           max_pos = PREDICT_POS(node, max_key);
           end = std::chrono::high_resolution_clock::now();
@@ -1420,6 +1456,7 @@ private:
         case 12:
           // axis: no recheck
           // ayis: recheck min and max
+          range_stats.case_id[12]++;
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
@@ -1442,6 +1479,7 @@ private:
         case 13:
           // axis: no recheck
           // ayis: recheck min
+          range_stats.case_id[13]++;
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
@@ -1463,6 +1501,7 @@ private:
         case 14:
           // axis: no recheck
           // ayis: recheck max
+          range_stats.case_id[14]++;
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
@@ -1484,6 +1523,7 @@ private:
         default:
           // axis: no recheck
           // ayis: no recheck
+          range_stats.case_id[15]++;
           for (int i = min_pos; i < max_pos + 1; ++i) {
             if (BITMAP_GET(node->none_bitmap, i) == 0) {
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
@@ -1497,6 +1537,17 @@ private:
             }
           }
           break;
+      }
+      int after_adding = result.size();
+      int added = after_adding - before_adding;
+      if (added == 0) {
+        range_stats.empty_visit_avg_node_size += node->num_items;
+      }
+      // if added in the range_stats.node_count map, increment the value
+      if (range_stats.node_count.find(added) != range_stats.node_count.end()) {
+        range_stats.node_count[added]++;
+      } else {
+        range_stats.node_count[added] = 1;
       }
     }
     return;
