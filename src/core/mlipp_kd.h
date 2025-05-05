@@ -2,6 +2,7 @@
 #define __MLIPP_KD_H__
 
 #include <stdint.h>
+#include <limits>
 #include <math.h>
 #include <cfloat>
 #include <limits>
@@ -286,6 +287,9 @@ private:
   struct Node
   {
     int level; // level of the node in the tree (rootlevel = 0)
+    // store the boundaries of the subtree
+    T lower_bound = 0;
+    T upper_bound = 0;
     int is_two; // is special node for only two keys
     int build_size; // tree size (include sub nodes) when node created
     int size; // current tree size (include sub nodes)
@@ -992,7 +996,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1020,7 +1029,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1048,7 +1062,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1075,7 +1094,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1098,7 +1122,12 @@ private:
                   new_recheck_case[axis] = 1;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1120,7 +1149,12 @@ private:
                   new_recheck_case[axis] = 1;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1142,7 +1176,12 @@ private:
                   new_recheck_case[axis] = 1;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1163,7 +1202,12 @@ private:
                   new_recheck_case[axis] = 1;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1186,7 +1230,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1208,7 +1257,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                  if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1230,7 +1284,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                  if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1251,7 +1310,12 @@ private:
                   new_recheck_case[axis] = 2;
                 else
                   new_recheck_case[axis] = 3;
+                  if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*new_recheck_case}});
+                }
               }
             }
           }
@@ -1266,7 +1330,12 @@ private:
                  && PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
               } else {
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                }
               }
             }
           }
@@ -1280,7 +1349,12 @@ private:
                 if (PT_VAL(node->items[i].comp.data, ayis) >= PT_VAL(min_key, ayis))
                   result.push_back(node->items[i].comp.data);
               } else {
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                }
               }
             }
           }
@@ -1294,7 +1368,12 @@ private:
                 if (PT_VAL(node->items[i].comp.data, ayis) <= PT_VAL(max_key, ayis))
                   result.push_back(node->items[i].comp.data);
               } else {
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                }
               }
             }
           }
@@ -1307,7 +1386,12 @@ private:
               if (BITMAP_GET(node->child_bitmap, i) == 0) {
                 result.push_back(node->items[i].comp.data);
               } else {
+                if (node->items[i].comp.child->lower_bound > PT_VAL(max_key, ayis) ||
+                  node->items[i].comp.child->upper_bound < PT_VAL(min_key, ayis)) {
+                  // Do nothing
+                } else {
                 s.push((RangeSection){node->items[i].comp.child, {*recheck_case}});
+                }
               }
             }
           }
@@ -1477,12 +1561,20 @@ private:
       RT_ASSERT(BITMAP_GET(node->none_bitmap, pos) == 1);
       BITMAP_CLEAR(node->none_bitmap, pos);
       node->items[pos].comp.data = key1;
+      node->lower_bound = PT_VAL(key1, axis);
+      node->upper_bound = PT_VAL(key1, axis);
     }
     { // insert key2
       int pos = PREDICT_POS(node, key2);
       RT_ASSERT(BITMAP_GET(node->none_bitmap, pos) == 1);
       BITMAP_CLEAR(node->none_bitmap, pos);
       node->items[pos].comp.data = key2;
+      if (PT_VAL(key2, axis) > node->upper_bound) {
+        node->upper_bound = PT_VAL(key2, axis);
+      }
+      if (PT_VAL(key2, axis) < node->lower_bound) {
+        node->lower_bound = PT_VAL(key2, axis);
+      }
     }
 
     return node;
@@ -1580,6 +1672,10 @@ private:
         memset(node->none_bitmap, BITMAP_ONE, sizeof(bitmap_t) * bitmap_size);
         memset(node->child_bitmap, BITMAP_ZERO, sizeof(bitmap_t) * bitmap_size);
 
+        // Initialize the lower and upper bounds
+        node->lower_bound = PT_VAL(keys[0], axis);
+        node->upper_bound = PT_VAL(keys[0], axis);
+
         for (int item_i = PREDICT_POS(node, keys[0]), offset = 0; offset < size; ) {
           int next = offset + 1, next_i = -1;
           while (next < size) {
@@ -1593,12 +1689,26 @@ private:
           if (next == offset + 1) {
             BITMAP_CLEAR(node->none_bitmap, item_i);
             node->items[item_i].comp.data = keys[offset];
+            if (PT_VAL(keys[offset], axis) < node->lower_bound) {
+              node->lower_bound = PT_VAL(keys[offset], axis);
+            }
+            if (PT_VAL(keys[offset], axis) > node->upper_bound) {
+              node->upper_bound = PT_VAL(keys[offset], axis);
+            }
           } else {
             // ASSERT(next - offset <= (size+2) / 3);
             BITMAP_CLEAR(node->none_bitmap, item_i);
             BITMAP_SET(node->child_bitmap, item_i);
             node->items[item_i].comp.child = new_nodes(1);
             s.push((Segment){begin + offset, begin + next, level + 1, node->items[item_i].comp.child});
+          }
+          for (int ii = offset; ii < next; ii++) {
+            if (PT_VAL(keys[ii], axis) < node->lower_bound) {
+              node->lower_bound = PT_VAL(keys[ii], axis);
+            }
+            if (PT_VAL(keys[ii], axis) > node->upper_bound) {
+              node->upper_bound = PT_VAL(keys[ii], axis);
+            }
           }
           if (next >= size) {
             break;
@@ -1734,6 +1844,10 @@ private:
         memset(node->none_bitmap, BITMAP_ONE, sizeof(bitmap_t) * bitmap_size);
         memset(node->child_bitmap, BITMAP_ZERO, sizeof(bitmap_t) * bitmap_size);
 
+        // Initialize the lower and upper bounds
+        node->lower_bound = PT_VAL(keys[0], axis);
+        node->upper_bound = PT_VAL(keys[0], axis);
+
         for (int item_i = PREDICT_POS(node, keys[0]), offset = 0; offset < size; ) {
           int next = offset + 1, next_i = -1;
           while (next < size) {
@@ -1747,12 +1861,26 @@ private:
           if (next == offset + 1) {
             BITMAP_CLEAR(node->none_bitmap, item_i);
             node->items[item_i].comp.data = keys[offset];
+            if (PT_VAL(keys[offset], axis) < node->lower_bound) {
+              node->lower_bound = PT_VAL(keys[offset], axis);
+            }
+            if (PT_VAL(keys[offset], axis) > node->upper_bound) {
+              node->upper_bound = PT_VAL(keys[offset], axis);
+            }
           } else {
             // ASSERT(next - offset <= (size+2) / 3);
             BITMAP_CLEAR(node->none_bitmap, item_i);
             BITMAP_SET(node->child_bitmap, item_i);
             node->items[item_i].comp.child = new_nodes(1);
             s.push((Segment){begin + offset, begin + next, level + 1, node->items[item_i].comp.child});
+            for (int ii = offset; ii < next; ii++) {
+              if (PT_VAL(keys[ii], axis) < node->lower_bound) {
+                node->lower_bound = PT_VAL(keys[ii], axis);
+              }
+              if (PT_VAL(keys[ii], axis) > node->upper_bound) {
+                node->upper_bound = PT_VAL(keys[ii], axis);
+              }
+            }
           }
           if (next >= size) {
             break;
