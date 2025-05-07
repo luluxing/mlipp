@@ -17,7 +17,7 @@ import sys
 
 def main():
   colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-  pt_size = 2
+  pt_size = 1
   with open(sys.argv[1], 'r') as f:
     lines = f.readlines()
     colors_idx = 0
@@ -42,10 +42,12 @@ def main():
       # Draw the points and make the points size smaller
       plt.scatter(*zip(*points_list), color=c, s=pt_size)
       # Draw the boundaries
-      plt.plot([minx, maxx], [miny, miny], c)
-      plt.plot([minx, maxx], [maxy, maxy], c)
-      plt.plot([minx, minx], [miny, maxy], c)
-      plt.plot([maxx, maxx], [miny, maxy], c)
+      if maxx - minx < maxy - miny:
+        plt.plot([minx, minx], [0, 1], c, linewidth=0.5, linestyle='--')
+        plt.plot([maxx, maxx], [0, 1], c, linewidth=0.5, linestyle='--')
+      else:
+        plt.plot([0, 1], [miny, miny], c, linewidth=0.5, linestyle='--')
+        plt.plot([0, 1], [maxy, maxy], c, linewidth=0.5, linestyle='--')
       
       plt.savefig(sys.argv[2])
 
