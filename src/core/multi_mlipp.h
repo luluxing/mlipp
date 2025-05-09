@@ -21,7 +21,7 @@ class MultiMlipp {
  public:
   MultiMlipp(int partition, Axis ax, Partition base)
   : partition_(partition), part_axis_(ax), base_(base) {
-    if (partition <= 0 || partition > 5) {
+    if (partition <= 0) {
       fprintf(stderr, "Partition out of bound.\n");
       exit(EXIT_FAILURE);
     }
