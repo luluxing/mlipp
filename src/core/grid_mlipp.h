@@ -6,10 +6,6 @@
 #include <vector>
 #include "mlipp_kd.h"
 
-enum Partition {
-  SPACE = 0,
-  DATA = 1
-};
 
 // Always use space partition for simplicity
 template<class T, bool USE_FMCD = true>

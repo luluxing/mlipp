@@ -17,6 +17,16 @@
 #include "point.h"
 #include "mlipp_pairingheap.h"
 
+enum Axis {
+  X_AXIS = 0,
+  Y_AXIS = 1
+};
+
+enum Partition {
+  SPACE = 0,
+  DATA = 1
+};
+
 template<class T, bool USE_FMCD = true>
 class MLIPP_KD
 {
