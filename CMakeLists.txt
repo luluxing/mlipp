@@ -103,6 +103,15 @@ target_link_libraries(
   GTest::gtest_main
 )
 
+add_executable(
+  test_mbtree
+  test/test_mbtree.cc
+)
+target_link_libraries(
+  test_mbtree
+  GTest::gtest_main
+)
+
 include(GoogleTest)
 gtest_discover_tests(mlipp_kd_test)
 gtest_discover_tests(point_test)
@@ -110,3 +119,4 @@ gtest_discover_tests(test_mlipp_z)
 gtest_discover_tests(test_lippxy)
 gtest_discover_tests(test_multi_mlipp)
 gtest_discover_tests(test_grid_mlipp)
+gtest_discover_tests(test_mbtree)
