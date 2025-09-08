@@ -19,3 +19,16 @@ TEST(MBTreeTest, BulkLoadSingleLeaf) {
     EXPECT_TRUE(mbtree.exists(data[i]));
   }
 }
+
+TEST(MBTreeTest, BulkLoadTwoLevel) {
+  MBTree<int> mbtree;
+  int num = 2500;
+  std::vector<Point<int>> data;
+  for (int i = 0; i < num; ++i) {
+    data.push_back((Point<int>){i, i});
+  }
+  mbtree.bulk_load(data.data(), data.size());
+  for (int i = 0; i < num; ++i) {
+    EXPECT_TRUE(mbtree.exists(data[i]));
+  }
+}

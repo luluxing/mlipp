@@ -64,4 +64,9 @@ static inline int compare_pt(const void* a, const void* b) {
     return cmp_x;
 }
 
+template <class T>
+static inline T get_dim(const Point<T>& key, bool x_axis) {
+  return x_axis ? key.x : key.y;
+}
+
 #endif // __POINT_H_
