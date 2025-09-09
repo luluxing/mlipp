@@ -32,3 +32,16 @@ TEST(MBTreeTest, BulkLoadTwoLevel) {
     EXPECT_TRUE(mbtree.exists(data[i]));
   }
 }
+
+TEST(MBTreeTest, BulkLoadRandomData) {
+  MBTree<uint64_t> mbtree;
+  int num = 12500;
+  std::vector<Point<uint64_t>> data;
+  for (int i = 0; i < num; ++i) {
+    data.push_back((Point<uint64_t>){rand(), rand()});
+  }
+  mbtree.bulk_load(data.data(), data.size());
+  for (int i = 0; i < num; ++i) {
+    EXPECT_TRUE(mbtree.exists(data[i]));
+  }
+}

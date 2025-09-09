@@ -23,7 +23,6 @@ struct LeafNode : public BNode {
     is_leaf = true;
     this->sort_by_x = sort_by_x;
     count = 0;
-    fprintf(stderr, "LeafNode: %d\n", max_count);
   }
 
   void load(Point<T>* vs, int begin, int num_keys) {
@@ -48,10 +47,10 @@ struct LeafNode : public BNode {
       } else if (get_dim(key, sort_by_x) > get_dim(points[mid], sort_by_x)) {
         lower = mid+1;
       } else {
-        return true;
+        return PT_EQ(key, points[mid]);
       }
     } while (lower < upper);
-    return false;
+    return PT_EQ(key, points[lower]);
   }
 };
 
@@ -65,7 +64,6 @@ struct InnerNode : public BNode {
     this->sort_by_x = sort_by_x;
     is_leaf = false;
     count = 0;
-    fprintf(stderr, "InnerNode: %d\n", max_count);
   }
 
   BNode* find_child(const Point<T>& key) const {
@@ -125,6 +123,7 @@ class MBTree {
   }
 
   // Points are not initially sorted
+  // Duplicate x or y points are not allowed
   void bulk_load(Point<T>* vs, int num_keys) {
     root_ = bulk_load_helper(vs, 0, num_keys, true);
 
@@ -167,15 +166,15 @@ class MBTree {
       qsort(keys, num_keys, sizeof(Point<T>), &compare_y<T>);
     
     int fanout = node_fanout(num_keys);
-    int partition_size = num_keys / fanout;
+    int partition_size = std::ceil(1.0 * num_keys / fanout);
     int remaining = num_keys;
     for (int i = 0; i < fanout; i++) {
-      auto child = bulk_load_helper(keys, begin + i * partition_size,
-                                    std::min(remaining, partition_size), !sort_by_x);
       if (sort_by_x)
         inner_node->keys[i] = keys[i * partition_size].x;
       else
         inner_node->keys[i] = keys[i * partition_size].y;
+      auto child = bulk_load_helper(keys, i * partition_size,
+                                    std::min(remaining, partition_size), !sort_by_x);
       inner_node->children[i] = child;
       inner_node->count++;
       remaining -= partition_size;
@@ -184,9 +183,15 @@ class MBTree {
   }
 
   int node_fanout(int num_keys) const {
-    int node_num = std::ceil(num_keys / LeafNode<T>::max_count) + 1;
-    int k = std::log2(node_num) / std::log2(InnerNode<T>::max_count);
-    int fanout = node_num / std::pow(InnerNode<T>::max_count, k);
+    int node_num = num_keys % LeafNode<T>::max_count == 0 ?
+                    num_keys / LeafNode<T>::max_count :
+                    num_keys / LeafNode<T>::max_count + 1;
+    int fanout = node_num;
+    while (node_num > 1) {
+      fanout = node_num;
+      double r = 1.0 * node_num / InnerNode<T>::max_count;
+      node_num = std::ceil(r);
+    }
     return fanout;
   }
 };
