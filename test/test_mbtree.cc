@@ -18,6 +18,14 @@ TEST(MBTreeTest, BulkLoadSingleLeaf) {
   for (int i = 0; i < num; ++i) {
     EXPECT_TRUE(mbtree.exists(data[i]));
   }
+
+  MBTree<int> mbtree2;
+  for (int i = 0; i < num; ++i) {
+    mbtree2.insert(data[i]);
+  }
+  for (int i = 0; i < num; ++i) {
+    EXPECT_TRUE(mbtree2.exists(data[i]));
+  }
 }
 
 TEST(MBTreeTest, BulkLoadTwoLevel) {
@@ -31,6 +39,14 @@ TEST(MBTreeTest, BulkLoadTwoLevel) {
   for (int i = 0; i < num; ++i) {
     EXPECT_TRUE(mbtree.exists(data[i]));
   }
+
+  MBTree<int> mbtree2;
+  for (int i = 0; i < num; ++i) {
+    mbtree2.insert(data[i]);
+  }
+  for (int i = 0; i < num; ++i) {
+    EXPECT_TRUE(mbtree2.exists(data[i]));
+  }
 }
 
 TEST(MBTreeTest, BulkLoadRandomData) {
@@ -43,5 +59,13 @@ TEST(MBTreeTest, BulkLoadRandomData) {
   mbtree.bulk_load(data.data(), data.size());
   for (int i = 0; i < num; ++i) {
     EXPECT_TRUE(mbtree.exists(data[i]));
+  }
+
+  MBTree<uint64_t> mbtree2;
+  for (int i = 0; i < num; ++i) {
+    mbtree2.insert(data[i]);
+  }
+  for (int i = 0; i < num; ++i) {
+    EXPECT_TRUE(mbtree2.exists(data[i]));
   }
 }

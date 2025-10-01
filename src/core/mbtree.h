@@ -25,6 +25,61 @@ struct LeafNode : public BNode {
     count = 0;
   }
 
+  void change_sort_axis() {
+    sort_by_x = !sort_by_x;
+    std::sort(points, points + count, [this](const Point<T>& a, const Point<T>& b) {
+      return get_dim(a, sort_by_x) < get_dim(b, sort_by_x);
+    });
+  }
+
+  bool is_full() const {
+    return count == max_count;
+  }
+
+  LeafNode* split(const Point<T>& key, T& pivot) {
+    auto new_leaf_node = new LeafNode<T>(sort_by_x);
+    new_leaf_node->count = count - count / 2;
+    count = count - new_leaf_node->count;
+    for (int i = 0; i < new_leaf_node->count; i++) {
+      new_leaf_node->points[i] = points[i + count];
+    }
+    pivot = get_dim(points[count - 1], sort_by_x);
+    if (get_dim(key, sort_by_x) < pivot) {
+      insert(key);
+    } else {
+      new_leaf_node->insert(key);
+    }
+    return new_leaf_node;
+  }
+
+  void insert(const Point<T>& key) {
+    if (count == 0) {
+      points[0] = key;
+      count++;
+      return;
+    }
+    int pos = lowerBound(get_dim(key, sort_by_x));
+    memmove(points+pos+1, points+pos, sizeof(Point<T>)*(count-pos));
+    points[pos] = key;
+    count++;
+  }
+
+  int lowerBound(T k) {
+    int lower=0;
+    int upper=count;
+    do {
+       int mid = ((upper-lower)/2) + lower;
+       if (k < get_dim(points[mid], sort_by_x)) {
+          upper = mid;
+       } else if (k > get_dim(points[mid], sort_by_x)) {
+          lower = mid+1;
+       } else {
+          return mid;
+       }
+    } while (lower < upper);
+    return lower;
+ }
+
   void load(Point<T>* vs, int begin, int num_keys) {
     for (int i = 0; i < num_keys; i++) {
       points[i] = vs[begin + i];
@@ -66,6 +121,10 @@ struct InnerNode : public BNode {
     count = 0;
   }
 
+  bool is_full() const {
+    return count == max_count - 1;
+  }
+
   BNode* find_child(const Point<T>& key) const {
     int lower = 1;
     int upper = count;
@@ -81,16 +140,85 @@ struct InnerNode : public BNode {
     } while (lower < upper);
     return children[lower - 1];
   }
+
+  void replace_child(BNode* old_child, BNode* new_child) {
+    for (int i = 0; i < count; i++) {
+      if (children[i] == old_child) {
+        children[i] = new_child;
+        return;
+      }
+    }
+  }
+
+  int lower_bound(T pivot) {
+    int lower = 0;
+    int upper = count;
+    do {
+      int mid = ((upper - lower) / 2) + lower;
+      if (pivot < keys[mid]) {
+        upper = mid;
+      } else if (pivot > keys[mid]) {
+        lower = mid + 1;
+      } else {
+        return mid;
+      }
+    } while (lower < upper);
+    return lower;
+  }
+
+  void insert(BNode* child, T pivot) {
+    int pos = lower_bound(pivot);
+    memmove(keys + pos + 1, keys + pos, sizeof(T) * (count-pos+1));
+    memmove(children+pos+1, children+pos, sizeof(BNode*)*(count-pos+1));
+    keys[pos] = pivot;
+    children[pos] = child;
+    std::swap(children[pos], children[pos+1]);
+    count++;
+  }
 };
 
 // Store the 2D points in the way of MLIPP_kd
 template <typename T>
 class MBTree {
  public:
-  MBTree() { root_ = nullptr; }
+  MBTree() { root_ = new LeafNode<T>(true); }
   ~MBTree() {}
 
+  // Since we change split axis alternatively, the tree cannot
+  // be built from bottom to top like B+-tree, but can only be
+  // built like kd-tree from top to bottom as we cannot group
+  // entries in one leaf node initially.
+  
   void insert(const Point<T>& key) {
+    BNode* node = root_;
+    BNode* parent = nullptr;
+    while (!node->is_leaf) {
+      InnerNode<T>* inner_node = static_cast<InnerNode<T>*>(node);
+      int pos = inner_node->lower_bound(get_dim(key, inner_node->sort_by_x));
+      node = inner_node->children[pos];
+      parent = inner_node;
+    }
+
+    LeafNode<T>* leaf_node = static_cast<LeafNode<T>*>(node);
+    if (leaf_node->is_full()) {
+      T pivot;
+      auto new_leaf_node = leaf_node->split(key, pivot);
+      if (parent == nullptr) {
+        root_ = make_parent(leaf_node, new_leaf_node, pivot);
+      } else {
+        InnerNode<T>* inner_node = static_cast<InnerNode<T>*>(parent);
+        if (!inner_node->is_full()) {
+          inner_node->insert(new_leaf_node, pivot);
+        } else {
+          auto new_inner_node = make_parent(leaf_node, new_leaf_node, pivot);
+          inner_node->replace_child(leaf_node, new_inner_node);
+          leaf_node->change_sort_axis();
+          new_leaf_node->change_sort_axis();
+        }
+      }
+    } else {
+      leaf_node->insert(key);
+    }
 
   }
 
@@ -101,7 +229,8 @@ class MBTree {
         return static_cast<LeafNode<T>*>(node)->exists(key);
       } else {
         InnerNode<T>* inner_node = static_cast<InnerNode<T>*>(node);
-        node = inner_node->find_child(key);
+        int pos = inner_node->lower_bound(get_dim(key, inner_node->sort_by_x));
+        node = inner_node->children[pos];
       }
     }
     return false;
@@ -168,20 +297,34 @@ class MBTree {
     int fanout = node_fanout(num_keys);
     int partition_size = std::ceil(1.0 * num_keys / fanout);
     int remaining = num_keys;
-    for (int i = 0; i < fanout; i++) {
+    for (int i = 0; i < fanout - 1; i++) {
       if (sort_by_x)
-        inner_node->keys[i] = keys[i * partition_size].x;
+        inner_node->keys[i] = keys[(i + 1) * partition_size - 1].x;
       else
-        inner_node->keys[i] = keys[i * partition_size].y;
+        inner_node->keys[i] = keys[(i + 1) * partition_size - 1].y;
       auto child = bulk_load_helper(keys, i * partition_size,
                                     std::min(remaining, partition_size), !sort_by_x);
       inner_node->children[i] = child;
       inner_node->count++;
       remaining -= partition_size;
+      if (i == fanout - 2) {
+        inner_node->children[i+1] = bulk_load_helper(keys, (i + 1) * partition_size,
+                                    remaining, !sort_by_x);
+      }
     }
     return inner_node;
   }
 
+  BNode* make_parent(BNode* left, BNode* right, T pivot) {
+    auto parent = new InnerNode<T>(left->sort_by_x);
+    parent->keys[0] = pivot;
+    parent->children[0] = left;
+    parent->children[1] = right;
+    parent->count = 1;
+    return parent;
+  }
+
+  // TODO: check the fill ratio of each node after building the tree
   int node_fanout(int num_keys) const {
     int node_num = num_keys % LeafNode<T>::max_count == 0 ?
                     num_keys / LeafNode<T>::max_count :
