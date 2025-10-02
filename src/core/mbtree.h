@@ -4,9 +4,30 @@
 #include <algorithm>
 #include <cmath>
 #include <sstream>
+#include <stack>
 #include "point.h"
 
 static const uint64_t PAGESIZE = 4*1024;
+
+template <typename T>
+bool greater_than(T key, T query) {
+  if (key == 0) return false;
+  return key >= query;
+}
+
+template <typename T>
+bool less_than(T key, T query) {
+  if (key == 0) return false;
+  return key <= query;
+}
+
+template <typename T>
+bool overlap(T low, T up, T query_low, T query_up) {
+  assert(!(low == 0 && up == 0));
+  if (low == 0) return query_low <= up;
+  if (up == 0) return query_up >= low;
+  return !(up < query_low || query_up < low);
+}
 
 struct BNode {
   bool is_leaf;
@@ -107,6 +128,22 @@ struct LeafNode : public BNode {
     } while (lower < upper);
     return PT_EQ(key, points[lower]);
   }
+
+  void get_data_within(const Point<T>& min_key, const Point<T>& max_key,
+                       std::vector<Point<T>>& leaf_data) {
+    for (int i = 0; i < count; i++) {
+      if (points[i].x >= min_key.x && points[i].x <= max_key.x &&
+          points[i].y >= min_key.y && points[i].y <= max_key.y) {
+        leaf_data.push_back(points[i]);
+      }
+    }
+  }
+
+  void get_all_data(std::vector<Point<T>>& leaf_data) const {
+    for (int i = 0; i < count; i++) {
+      leaf_data.push_back(points[i]);
+    }
+  }
 };
 
 template <typename T>
@@ -175,6 +212,30 @@ struct InnerNode : public BNode {
     std::swap(children[pos], children[pos+1]);
     count++;
   }
+
+  bool child_within(int pos, const Point<T>& min_key, const Point<T>& max_key,
+                    int& lower_x, int& upper_x, int& lower_y, int& upper_y) {
+    T lower_key, upper_key;
+    if (pos == 0) {
+      lower_key = 0;
+      upper_key = keys[0];
+    } else if (pos == count) {
+      lower_key = keys[count - 1];
+      upper_key = 0;
+    } else {
+      lower_key = keys[pos - 1];
+      upper_key = keys[pos];
+    }
+    if (sort_by_x) {
+      lower_x = lower_key;
+      upper_x = upper_key;
+      return overlap(lower_x, upper_x, min_key.x, max_key.x);
+    } else {
+      lower_y = lower_key;
+      upper_y = upper_key;
+      return overlap(lower_y, upper_y, min_key.y, max_key.y);
+    }
+  }
 };
 
 // Store the 2D points in the way of MLIPP_kd
@@ -241,6 +302,36 @@ class MBTree {
                   const Point<T>& max_key,
                   std::vector<Point<T>>& result) {
 
+    
+    std::stack<NodeRange> s;
+    s.push((NodeRange){0, 0, 0, 0, root_});
+    while (!s.empty()) {
+      auto node_range = s.top();
+      s.pop();
+      if (within_range(node_range, min_key, max_key)) {
+        // Get all the leaf nodes in the range and add to result
+        std::vector<Point<T>> leaf_data;
+        get_subtree_data(node_range.node, leaf_data);
+        // Append leaf_data to result
+        result.insert(result.end(), leaf_data.begin(), leaf_data.end());
+      } else {
+        if (node_range.node->is_leaf) {
+          // Find the data in the range and add to result
+          std::vector<Point<T>> leaf_data;
+          LeafNode<T>* leaf_node = static_cast<LeafNode<T>*>(node_range.node);
+          leaf_node->get_data_within(min_key, max_key, leaf_data);
+          // Append leaf_data to result
+          result.insert(result.end(), leaf_data.begin(), leaf_data.end());
+        } else {
+          // Find the child nodes in the range and add to stack
+          std::vector<NodeRange> child_nodes;
+          get_children_within(node_range, min_key, max_key, child_nodes);
+          for (auto child_node : child_nodes) {
+            s.push(child_node);
+          }
+        }
+      }
+    }
   }
 
   int range_query(const Point<T>& lower, const Point<T>& upper, Point<T>* results) const {
@@ -279,6 +370,14 @@ class MBTree {
   }
 
  private:
+  typedef struct {
+    // Range of the node
+    T lower_x;
+    T upper_x;
+    T lower_y;
+    T upper_y;
+    BNode* node;
+  } NodeRange;
   BNode* root_;
 
   BNode* bulk_load_helper(Point<T>* vs, int begin, int num_keys, bool sort_by_x) {
@@ -336,6 +435,45 @@ class MBTree {
       node_num = std::ceil(r);
     }
     return fanout;
+  }
+
+  bool within_range(const NodeRange& node_range,
+                    const Point<T>& min_key, const Point<T>& max_key) {
+    
+    return greater_than(node_range.lower_x, min_key.x) &&
+           less_than(node_range.upper_x, max_key.x) &&
+           greater_than(node_range.lower_y, min_key.y) &&
+           less_than(node_range.upper_y, max_key.y);
+  }
+
+  void get_subtree_data(const BNode* node, std::vector<Point<T>>& leaf_data) {
+    if (node->is_leaf) {
+      const LeafNode<T>* leaf_node = static_cast<const LeafNode<T>*>(node);
+      leaf_node->get_all_data(leaf_data);
+    } else {
+      const InnerNode<T>* inner_node = static_cast<const InnerNode<T>*>(node);
+      for (int i = 0; i <= inner_node->count; i++) {
+        get_subtree_data(inner_node->children[i], leaf_data);
+      }
+    }
+  }
+
+  void get_children_within(const NodeRange& node_range,
+                           const Point<T>& min_key, const Point<T>& max_key,
+                           std::vector<NodeRange>& child_nodes) {
+    if (node_range.node->is_leaf) {
+      return;
+    }
+    InnerNode<T>* inner_node = static_cast<InnerNode<T>*>(node_range.node);
+    for (int i = 0; i <= inner_node->count; i++) {
+      int lower_x = node_range.lower_x;
+      int upper_x = node_range.upper_x;
+      int lower_y = node_range.lower_y;
+      int upper_y = node_range.upper_y;
+      if (inner_node->child_within(i, min_key, max_key, lower_x, upper_x, lower_y, upper_y)) {
+        child_nodes.push_back(NodeRange{lower_x, upper_x, lower_y, upper_y, inner_node->children[i]});
+      }
+    }
   }
 };
 
