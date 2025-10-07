@@ -335,11 +335,11 @@ class MBTree {
   }
 
   int range_query(const Point<T>& lower, const Point<T>& upper, Point<T>* results) const {
-
+    return 0;
   }
 
   int knn_query(const Point<T>& key, int k, Point<T>* results, double* distances) {
-
+    return 0;
   }
 
   // Points are not initially sorted
@@ -349,21 +349,21 @@ class MBTree {
 
   }
 
-  void show() const {
+  // void show() const {
 
-  }
+  // }
 
-  int max_depth() const {
+  // int max_depth() const {
 
-  }
+  // }
 
-  void print_depth(int *max_depth_ret, double *avg_depth) const {
+  // void print_depth(int *max_depth_ret, double *avg_depth) const {
 
-  }
+  // }
 
-  void print_stats() const {
+  // void print_stats() const {
 
-  }
+  // }
 
   size_t index_size() const {
     std::stack<BNode*> s;
@@ -480,10 +480,10 @@ class MBTree {
     }
     InnerNode<T>* inner_node = static_cast<InnerNode<T>*>(node_range.node);
     for (int i = 0; i <= inner_node->count; i++) {
-      int lower_x = node_range.lower_x;
-      int upper_x = node_range.upper_x;
-      int lower_y = node_range.lower_y;
-      int upper_y = node_range.upper_y;
+      T lower_x = node_range.lower_x;
+      T upper_x = node_range.upper_x;
+      T lower_y = node_range.lower_y;
+      T upper_y = node_range.upper_y;
       if (inner_node->child_within(i, min_key, max_key, lower_x, upper_x, lower_y, upper_y)) {
         child_nodes.push_back(NodeRange{lower_x, upper_x, lower_y, upper_y, inner_node->children[i]});
       }
