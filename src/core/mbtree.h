@@ -214,7 +214,7 @@ struct InnerNode : public BNode {
   }
 
   bool child_within(int pos, const Point<T>& min_key, const Point<T>& max_key,
-                    int& lower_x, int& upper_x, int& lower_y, int& upper_y) {
+                    T& lower_x, T& upper_x, T& lower_y, T& upper_y) {
     T lower_key, upper_key;
     if (pos == 0) {
       lower_key = 0;
