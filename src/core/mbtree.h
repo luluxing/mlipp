@@ -365,8 +365,22 @@ class MBTree {
 
   }
 
-  size_t index_size(bool total=false, bool ignore_child=true) const {
-    return 0;
+  size_t index_size() const {
+    std::stack<BNode*> s;
+    s.push(root_);
+    size_t size = 0;
+    while (!s.empty()) {
+      BNode* node = s.top();
+      s.pop();
+      size += sizeof(*node);
+      if (!node->is_leaf) {
+        InnerNode<T>* inner_node = static_cast<InnerNode<T>*>(node);
+        for (int i = 0; i <= inner_node->count; i++) {
+          s.push(inner_node->children[i]);
+        }
+      }
+    }
+    return size;
   }
 
  private:
