@@ -21,6 +21,7 @@ else()
 endif()
 
 include_directories(src/core)
+include_directories(src/btree)
 include_directories(src/morton)
 
 # add_executable(example_kdtree src/examples/example_kdtree.cpp)
@@ -112,6 +113,15 @@ target_link_libraries(
   GTest::gtest_main
 )
 
+add_executable(
+  test_btreexy
+  test/test_btreexy.cc
+)
+target_link_libraries(
+  test_btreexy
+  GTest::gtest_main
+)
+
 include(GoogleTest)
 gtest_discover_tests(mlipp_kd_test)
 gtest_discover_tests(point_test)
@@ -120,3 +130,4 @@ gtest_discover_tests(test_lippxy)
 gtest_discover_tests(test_multi_mlipp)
 gtest_discover_tests(test_grid_mlipp)
 gtest_discover_tests(test_mbtree)
+gtest_discover_tests(test_btreexy)
