@@ -4,7 +4,7 @@
 
 enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
-static const uint64_t PAGESIZE=4*1024;
+// static const uint64_t PAGESIZE=4*1024;
 
 struct NodeBase{
   PageType type;
@@ -308,6 +308,24 @@ restart:
     for (int i = 0; i < num_entries; ++i) {
       insert(entries[i].first, entries[i].second);
     }
+  }
+
+  size_t index_size() const {
+    std::stack<NodeBase*> s;
+    s.push(root);
+    size_t size = 0;
+    while (!s.empty()) {
+      NodeBase* node = s.top();
+      s.pop();
+      size += sizeof(*node);
+      if (node->type == PageType::BTreeInner) {
+        auto inner = static_cast<BTreeInner<Key>*>(node);
+        for (int i = 0; i < inner->count; ++i) {
+          s.push(inner->children[i]);
+        }
+      }
+    }
+    return size;
   }
 
 };

@@ -117,7 +117,7 @@ class BTreeXY {
   }
 
   size_t index_size() const {
-    auto s = btree_x.index_size(true, false) + btree_y.index_size(true, false);
+    auto s = btree_x.index_size() + btree_y.index_size();
     s += pts_sort_x.size() * sizeof(Point<T>);
     s += pts_sort_y.size() * sizeof(Point<T>);
     return s;
