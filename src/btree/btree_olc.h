@@ -1,10 +1,11 @@
 #ifndef __BtreeOLC_H__
 #define __BtreeOLC_H__
 
+#include <stack>
 
 enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
-// static const uint64_t PAGESIZE=4*1024;
+static const uint64_t PAGESIZE=4*1024;
 
 struct NodeBase{
   PageType type;
