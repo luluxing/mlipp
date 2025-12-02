@@ -139,6 +139,15 @@ target_link_libraries(
   test_mpgm
   GTest::gtest_main
 )
+
+add_executable(
+  test_btree_zorder
+  test/test_btree_zorder.cc
+)
+target_link_libraries(
+  test_btree_zorder
+  GTest::gtest_main
+)
 include(GoogleTest)
 gtest_discover_tests(mlipp_kd_test)
 gtest_discover_tests(point_test)
@@ -149,3 +158,4 @@ gtest_discover_tests(test_grid_mlipp)
 gtest_discover_tests(test_mbtree)
 gtest_discover_tests(test_spatialPGM)
 gtest_discover_tests(test_mpgm)
+gtest_discover_tests(test_btree_zorder)
