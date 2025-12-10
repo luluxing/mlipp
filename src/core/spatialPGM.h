@@ -307,6 +307,24 @@ class SpatialPGM {
     return results;
   }
 
+  size_t index_size() const {
+    size_t bytes = sizeof(points_by_x_) + points_by_x_.capacity() * sizeof(Point<T>);
+
+    // x-index structure and its backing storage
+    bytes += sizeof(x_index_) + x_index_.size_in_bytes();
+
+    // container overhead for x-segments
+    bytes += sizeof(x_segments_) + x_segments_.capacity() * sizeof(XSegment);
+
+    // per-segment allocations (y-index storage and y-sorted points)
+    for (const auto& seg : x_segments_) {
+      bytes += seg.points.capacity() * sizeof(Point<T>);
+      bytes += seg.y_index.size_in_bytes();
+    }
+
+    return bytes;
+  }
+
  private:
 
   size_t epsilon_x_ = EpsilonX;

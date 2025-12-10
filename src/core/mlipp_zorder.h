@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <math.h>
+#include <algorithm>
 #include <limits>
 #include <cstdio>
 #include <stack>
@@ -18,14 +19,18 @@
 
 using namespace libmorton;
 
-uint32_t precision = 4294967295; // 2^32 - 1
-// uint32_t precision = 8388607; // 2^23 - 1
-
-
 template<class T, bool USE_FMCD = true>
 class MLIPP_Z
 {
   typedef uint_fast64_t Z;
+  static constexpr uint32_t kPrecision = 4294967295; // 2^32 - 1
+
+  struct Bounds {
+    double min_x = 0.0;
+    double min_y = 0.0;
+    double span_x = 1.0;
+    double span_y = 1.0;
+  };
 
   inline int compute_gap_count(int size) {
     if (size >= 1000000) return 1;
@@ -36,9 +41,13 @@ class MLIPP_Z
   inline Z encode(const Point<T>& key) const {
     // If T is double, need to transform it to int first.
     if constexpr (std::is_same<T, double>::value) {
+      const double norm_x =
+          std::clamp((key.x - bounds_.min_x) / bounds_.span_x, 0.0, 1.0);
+      const double norm_y =
+          std::clamp((key.y - bounds_.min_y) / bounds_.span_y, 0.0, 1.0);
       return morton2D_64_encode(
-        static_cast<uint32_t>(key.x * precision),
-        static_cast<uint32_t>(key.y * precision));
+        static_cast<uint32_t>(norm_x * kPrecision),
+        static_cast<uint32_t>(norm_y * kPrecision));
     }
     return morton2D_64_encode(key.x, key.y);
   }
@@ -78,6 +87,13 @@ class MLIPP_Z
   } stats;
 
 public:
+
+  void set_bounds(double min_x, double min_y, double max_x, double max_y) {
+    bounds_.min_x = min_x;
+    bounds_.min_y = min_y;
+    bounds_.span_x = std::max(max_x - min_x, std::numeric_limits<double>::epsilon());
+    bounds_.span_y = std::max(max_y - min_y, std::numeric_limits<double>::epsilon());
+  }
 
   MLIPP_Z(double BUILD_LR_REMAIN = 0, bool QUIET = true)
     : BUILD_LR_REMAIN(BUILD_LR_REMAIN), QUIET(QUIET) {
@@ -316,6 +332,7 @@ private:
     bitmap_t* child_bitmap; // 1 means Child. will always be 0 when none_bitmap is 1
   };
 
+  Bounds bounds_;
   Node* root;
   std::stack<Node*> pending_two;
 

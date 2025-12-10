@@ -4,6 +4,8 @@
 #include "btree_olc.h"
 #include "point.h"
 
+using namespace btree_olc_internal;
+
 template<class T>
 class BTreeXY {
   public:

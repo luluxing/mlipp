@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "point.h"
 
 using namespace libmorton;
+using namespace btree_olc_internal;
 
 // A simple B+-tree based index over 2D points using Z-order (Morton) encoding.
 // Points are encoded into a 64-bit Morton key and indexed with the BTree
@@ -27,11 +29,18 @@ using namespace libmorton;
 template <class T>
 class BTreeZOrder {
  public:
-  BTreeZOrder() : btree_() {}
+ BTreeZOrder() : btree_() {}
 
   ~BTreeZOrder() {
     destroy_tree(btree_.root);
     btree_.root = nullptr;
+  }
+
+  void set_bounds(double min_x, double min_y, double max_x, double max_y) {
+    bounds_.min_x = min_x;
+    bounds_.min_y = min_y;
+    bounds_.span_x = std::max(max_x - min_x, std::numeric_limits<double>::epsilon());
+    bounds_.span_y = std::max(max_y - min_y, std::numeric_limits<double>::epsilon());
   }
 
   void bulk_load(Point<T>* vs, int num_keys) {
@@ -130,8 +139,14 @@ class BTreeZOrder {
   }
 
  private:
-  using ZKey = uint64_t;
+ using ZKey = uint64_t;
   static constexpr uint32_t kPrecision = 4294967295u;  // 2^32 - 1
+  struct Bounds {
+    double min_x = 0.0;
+    double min_y = 0.0;
+    double span_x = 1.0;
+    double span_y = 1.0;
+  };
 
   void reset() {
     destroy_tree(btree_.root);
@@ -153,9 +168,13 @@ class BTreeZOrder {
   inline ZKey encode(const Point<T>& key) const {
     // If T is double, need to transform it to int first.
     if constexpr (std::is_same<T, double>::value) {
+      const double norm_x =
+          std::clamp((key.x - bounds_.min_x) / bounds_.span_x, 0.0, 1.0);
+      const double norm_y =
+          std::clamp((key.y - bounds_.min_y) / bounds_.span_y, 0.0, 1.0);
       return morton2D_64_encode(
-          static_cast<uint32_t>(key.x * kPrecision),
-          static_cast<uint32_t>(key.y * kPrecision));
+          static_cast<uint32_t>(norm_x * kPrecision),
+          static_cast<uint32_t>(norm_y * kPrecision));
     }
     return morton2D_64_encode(key.x, key.y);
   }
@@ -168,6 +187,7 @@ class BTreeZOrder {
 
   BTree<ZKey, uint64_t> btree_;
   std::vector<std::vector<Point<T>>> payloads_;
+  Bounds bounds_;
 };
 
 #endif  // BTREE_ZORDER_HPP

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <limits>
 #include <stdexcept>
+#include <stack>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -90,6 +91,33 @@ class mPGM {
     data_.push_back(point);
     destroy(root_);
     root_ = build_node(data_, Axis::X);
+  }
+
+  size_t index_size() const {
+    size_t bytes = sizeof(data_) + data_.capacity() * sizeof(Point<T>);
+    if (!root_) return bytes;
+
+    std::stack<const Node*> s;
+    s.push(root_);
+    while (!s.empty()) {
+      const Node* node = s.top();
+      s.pop();
+
+      bytes += sizeof(*node);
+      bytes += node->points.capacity() * sizeof(Point<T>);
+      bytes += node->segments.capacity() * sizeof(Segment);
+      bytes += node->segment_start.capacity() * sizeof(size_t);
+      bytes += node->segment_end.capacity() * sizeof(size_t);
+      bytes += node->segment_upper.capacity() * sizeof(size_t);
+      bytes += node->segment_min.capacity() * sizeof(T);
+      bytes += node->segment_max.capacity() * sizeof(T);
+      bytes += node->children.capacity() * sizeof(Node*);
+
+      for (const auto* child : node->children) {
+        if (child) s.push(child);
+      }
+    }
+    return bytes;
   }
 
   size_t size() const { return data_.size(); }

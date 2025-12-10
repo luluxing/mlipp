@@ -7,6 +7,8 @@
 #include <stack>
 #include "point.h"
 
+namespace mbtree_internal {
+
 static const uint64_t PAGESIZE = 4*1024;
 
 template <typename T>
@@ -490,5 +492,7 @@ class MBTree {
     }
   }
 };
+
+} // namespace mbtree_internal
 
 #endif // __MBTREE_H__

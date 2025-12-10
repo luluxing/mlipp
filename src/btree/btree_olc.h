@@ -5,6 +5,7 @@
 
 enum class PageType : uint8_t { BTreeInner=1, BTreeLeaf=2 };
 
+namespace btree_olc_internal {
 static const uint64_t PAGESIZE=4*1024;
 
 struct NodeBase{
@@ -330,5 +331,7 @@ restart:
   }
 
 };
+
+} // namespace btree_olc_internal
 
 #endif // __BtreeOLC_H__
